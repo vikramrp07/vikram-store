@@ -1,0 +1,5 @@
+{
+  "name": "InventoryFlow",
+  "description": "A modern, Google Sheets-integrated Inventory Management System with Inward/Outward tracking, Master data management, and AI-powered stock insights.",
+  "requestFramePermissions": []
+}
