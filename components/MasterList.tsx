@@ -1,11 +1,11 @@
 import React, { useState, useRef } from 'react';
 import { useInventory } from '../context/InventoryContext';
-import { Search, Edit2, Save, X, UploadCloud, FileSpreadsheet, Plus } from 'lucide-react';
+import { Search, Edit2, Save, X, UploadCloud, FileSpreadsheet, Plus, ArrowDownCircle, Loader2 } from 'lucide-react';
 import { Item, CATEGORIES, UNITS } from '../types';
 import * as XLSX from 'xlsx';
 
 export const MasterList: React.FC = () => {
-  const { items, updateItem, importItems, addItem } = useInventory();
+  const { items, updateItem, importItems, addItem, processInward } = useInventory();
   const [searchTerm, setSearchTerm] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Item>>({});
@@ -21,6 +21,13 @@ export const MasterList: React.FC = () => {
     openingStock: 0,
     currentStock: 0
   });
+
+  // Add Stock Modal State
+  const [showStockModal, setShowStockModal] = useState(false);
+  const [selectedStockItem, setSelectedStockItem] = useState<{code: string, name: string} | null>(null);
+  const [stockQty, setStockQty] = useState('');
+  const [stockSupplier, setStockSupplier] = useState('');
+  const [stockLoading, setStockLoading] = useState(false);
 
   const filteredItems = items.filter(i => 
     i.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -81,6 +88,32 @@ export const MasterList: React.FC = () => {
       openingStock: 0,
       currentStock: 0
     });
+  };
+
+  const openStockModal = (item: Item) => {
+    setSelectedStockItem({ code: item.code, name: item.name });
+    setStockQty('');
+    setStockSupplier('');
+    setShowStockModal(true);
+  };
+
+  const submitAddStock = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedStockItem || !stockQty || !stockSupplier) return;
+
+    setStockLoading(true);
+    try {
+      await processInward({
+        itemCode: selectedStockItem.code,
+        quantity: Number(stockQty),
+        supplier: stockSupplier
+      });
+      setShowStockModal(false);
+    } catch (error: any) {
+      alert("Failed to add stock: " + error.message);
+    } finally {
+      setStockLoading(false);
+    }
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -274,9 +307,22 @@ export const MasterList: React.FC = () => {
                         <button onClick={cancelEdit} className="text-red-600 hover:bg-red-100 p-2 rounded-lg transition-colors"><X size={16} /></button>
                       </div>
                     ) : (
-                      <button onClick={() => startEdit(item)} className="text-blue-600 hover:bg-blue-100 p-2 rounded-lg transition-colors">
-                        <Edit2 size={16} />
-                      </button>
+                      <div className="flex justify-center items-center space-x-1">
+                        <button 
+                          onClick={() => startEdit(item)} 
+                          className="text-blue-600 hover:bg-blue-100 p-2 rounded-lg transition-colors"
+                          title="Edit Item Details"
+                        >
+                          <Edit2 size={16} />
+                        </button>
+                        <button 
+                          onClick={() => openStockModal(item)} 
+                          className="text-emerald-600 hover:bg-emerald-100 p-2 rounded-lg transition-colors"
+                          title="Add Stock (Inward)"
+                        >
+                          <ArrowDownCircle size={16} />
+                        </button>
+                      </div>
                     )}
                   </td>
                 </tr>
@@ -370,6 +416,73 @@ export const MasterList: React.FC = () => {
                   className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors shadow-sm"
                 >
                   Create Item
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Stock Modal */}
+      {showStockModal && selectedStockItem && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden transform transition-all scale-100">
+            <div className="bg-emerald-600 px-6 py-4 flex justify-between items-center">
+              <h3 className="font-semibold text-white flex items-center">
+                <ArrowDownCircle size={20} className="mr-2" /> 
+                Add Stock (Inward)
+              </h3>
+              <button onClick={() => setShowStockModal(false)} className="text-emerald-100 hover:text-white transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+            
+            <form onSubmit={submitAddStock} className="p-6 space-y-4">
+              <div className="bg-emerald-50 p-3 rounded-lg border border-emerald-100 text-sm">
+                <span className="text-emerald-800 font-semibold">{selectedStockItem.name}</span>
+                <div className="text-emerald-600 text-xs">Code: {selectedStockItem.code}</div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Quantity to Add</label>
+                <input 
+                  required
+                  type="number" 
+                  min="1"
+                  autoFocus
+                  value={stockQty}
+                  onChange={(e) => setStockQty(e.target.value)}
+                  className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  placeholder="0"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Supplier / Party</label>
+                <input 
+                  required
+                  type="text" 
+                  value={stockSupplier}
+                  onChange={(e) => setStockSupplier(e.target.value)}
+                  className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  placeholder="e.g. Vendor A"
+                />
+              </div>
+
+              <div className="pt-2">
+                <button 
+                  type="submit" 
+                  disabled={stockLoading}
+                  className="w-full px-4 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium transition-colors shadow-sm disabled:opacity-70 flex justify-center items-center"
+                >
+                  {stockLoading ? (
+                    <>
+                      <Loader2 size={18} className="animate-spin mr-2" />
+                      Adding...
+                    </>
+                  ) : (
+                    'Confirm Inward'
+                  )}
                 </button>
               </div>
             </form>

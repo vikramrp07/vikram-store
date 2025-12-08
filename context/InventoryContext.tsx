@@ -4,13 +4,15 @@ import { Item, LogEntry, TransactionType, InwardEntry } from '../types';
 // =========================================================================================
 // 🚀 CONFIGURATION: PASTE YOUR GOOGLE WEB APP URL BELOW
 // =========================================================================================
-const API_URL = ""; // e.g. "https://script.google.com/macros/s/AKfycbx.../exec"
+const HARDCODED_API_URL = ""; // e.g. "https://script.google.com/macros/s/AKfycbx.../exec"
 // =========================================================================================
 
 interface InventoryContextType {
   items: Item[];
   logs: LogEntry[];
   loading: boolean;
+  isConnected: boolean;
+  connectionError: string | null;
   addItem: (item: Item) => Promise<void>;
   updateItem: (code: string, updates: Partial<Item>) => Promise<void>;
   importItems: (newItems: Item[]) => void;
@@ -19,6 +21,7 @@ interface InventoryContextType {
   processOutward: (data: { itemCode: string; quantity: number; customer: string }) => Promise<void>;
   exportData: () => void;
   adjustStock: (code: string, newQty: number, reason: string) => Promise<void>;
+  setConnectionUrl: (url: string) => void;
 }
 
 const InventoryContext = createContext<InventoryContextType | undefined>(undefined);
@@ -30,60 +33,133 @@ const INITIAL_ITEMS: Item[] = [
 ];
 
 export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  // Initialize from Hardcoded OR LocalStorage
+  const [apiUrl, setApiUrl] = useState<string>(() => {
+    return HARDCODED_API_URL || localStorage.getItem('inventory_api_url') || "";
+  });
+
   const [items, setItems] = useState<Item[]>(INITIAL_ITEMS);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(false);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
 
-  // Fetch Data on Load
+  // Fetch Data on Load or when URL changes
   useEffect(() => {
-    if (API_URL) {
+    if (apiUrl) {
       fetchData();
     } else {
-      console.log('Running in Local Demo Mode. Add API_URL in InventoryContext.tsx to connect Google Sheets.');
+      console.log('Running in Local Demo Mode. Connect Google Sheet via Settings.');
     }
-  }, []);
+  }, [apiUrl]);
+
+  const setConnectionUrl = (url: string) => {
+    const cleanUrl = url.trim();
+    localStorage.setItem('inventory_api_url', cleanUrl);
+    setApiUrl(cleanUrl);
+    setConnectionError(null);
+    if (!cleanUrl) {
+      setItems(INITIAL_ITEMS);
+      setLogs([]);
+    }
+  };
 
   const fetchData = async () => {
+    if (!apiUrl) return;
     setLoading(true);
+    setConnectionError(null);
     try {
+      // Helper to handle response parsing with safeguards
+      const fetchJson = async (url: string) => {
+        // We use credentials: 'omit' to avoid sending Google cookies that might confuse the script if "Anyone" access is not perfect.
+        const res = await fetch(url, { redirect: 'follow', credentials: 'omit' });
+        
+        if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
+        
+        const text = await res.text();
+        try {
+          return JSON.parse(text);
+        } catch (e) {
+          // If we got HTML (e.g. Google Error page), throw a clear error
+          console.error("Non-JSON response received:", text.substring(0, 150));
+          if (text.includes("script.google.com")) {
+            throw new Error("Script Error: The Google Sheet script returned an error page. Check the script logs.");
+          } else if (text.includes("Google Drive")) {
+             throw new Error("Permission Error: Ensure the Web App is deployed as 'Anyone'.");
+          }
+          throw new Error("Invalid response from server.");
+        }
+      };
+
+      // Add timestamp to prevent caching
+      const ts = new Date().getTime();
+      
       // Fetch Items
-      const itemsRes = await fetch(`${API_URL}?action=getItems`);
-      const itemsJson = await itemsRes.json();
-      if (itemsJson.status === 'success') setItems(itemsJson.data);
+      const itemsJson = await fetchJson(`${apiUrl}?action=getItems&_t=${ts}`);
+      if (itemsJson.status === 'success') {
+         setItems(itemsJson.data);
+      } else {
+         throw new Error(itemsJson.message || "Failed to load items");
+      }
 
       // Fetch Logs
-      const logsRes = await fetch(`${API_URL}?action=getLogs`);
-      const logsJson = await logsRes.json();
-      if (logsJson.status === 'success') setLogs(logsJson.data);
+      const logsJson = await fetchJson(`${apiUrl}?action=getLogs&_t=${ts}`);
+      if (logsJson.status === 'success') {
+         setLogs(logsJson.data);
+      }
 
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to fetch data", error);
+      setConnectionError(error.message || "Failed to connect to Google Sheet");
     } finally {
       setLoading(false);
     }
   };
 
   const postToApi = async (payload: any) => {
-    if (!API_URL) return; // Use local logic if no API
+    if (!apiUrl) return; 
+    setConnectionError(null);
     
-    // Google Apps Script requires text/plain to avoid CORS preflight issues in some browsers
-    await fetch(API_URL, {
+    // Use text/plain to avoid CORS Preflight (OPTIONS)
+    const response = await fetch(apiUrl, {
       method: 'POST',
+      credentials: 'omit',
+      redirect: 'follow',
+      headers: {
+        "Content-Type": "text/plain;charset=utf-8", 
+      },
       body: JSON.stringify(payload)
     });
+
+    if (!response.ok) {
+        throw new Error(`API Request Failed: ${response.status}`);
+    }
+    
+    const text = await response.text();
+    let json;
+    try {
+        json = JSON.parse(text);
+    } catch(e) {
+        console.warn("Could not parse POST response", e);
+        // Sometimes a redirect happens and we get HTML, but action succeeded. 
+        // We throw if we can't confirm success, to be safe.
+        throw new Error("Invalid response from server during save.");
+    }
+
+    if(json.status === 'error') throw new Error(json.message);
+    return json;
   };
 
   const addItem = async (newItem: Item) => {
-    if (API_URL) {
+    if (apiUrl) {
       await postToApi({ action: 'addItem', item: newItem });
-      await fetchData(); // Reload to sync
+      await fetchData(); 
     } else {
       setItems(prev => [...prev, newItem]);
     }
   };
 
   const updateItem = async (code: string, updates: Partial<Item>) => {
-    if (API_URL) {
+    if (apiUrl) {
       await postToApi({ action: 'updateItem', code, updates });
       await fetchData();
     } else {
@@ -92,20 +168,12 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
   };
 
   const adjustStock = async (code: string, newQty: number, reason: string) => {
-     // Local Logic
      const currentItem = items.find(i => i.code === code);
      if (!currentItem) return;
      const diff = newQty - currentItem.currentStock;
      
-     if (API_URL) {
-       // We'll reuse updateItem logic or create a specific adjust action on backend
-       // For now, simpler to reuse updateItem + addLog logic if we had separate endpoints, 
-       // but let's assume we do updateItem and then fetchData.
-       // Note: The GAS script provided earlier has a basic 'updateItem'. 
-       // For a real app, you'd want a dedicated 'adjustStock' endpoint to ensure atomicity.
-       // Sending 'updateItem' with just currentStock.
+     if (apiUrl) {
        await postToApi({ action: 'updateItem', code, updates: { currentStock: newQty } });
-       // We would ideally also post a log manually here, but let's just sync.
        await fetchData();
      } else {
         updateItem(code, { currentStock: newQty });
@@ -114,9 +182,7 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
           date: new Date().toISOString(),
           itemCode: code,
           itemName: currentItem.name,
-          type: TransactionType.INWARD, // Reusing type or need new ENUM. 
-          // Since TransactionType enum wasn't strictly updated in previous prompts, 
-          // we use INWARD/OUTWARD based on diff.
+          type: TransactionType.INWARD, 
           quantity: Math.abs(diff),
           partyName: `Adjustment: ${reason}`,
           stockAfter: newQty
@@ -126,12 +192,6 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
   };
 
   const importItems = (newItems: Item[]) => {
-    // This is strictly local helper for the MasterList component's "Excel Import" feature
-    // which usually just populates the view. If we want to save to DB:
-    // It's better to loop and addItem or bulk add. 
-    // For now, we keep local behavior or user must use "Bulk Inward".
-    // Or we can implement a bulkAddItem.
-    
     setItems(prevItems => {
       const itemMap = new Map(prevItems.map(i => [i.code, i]));
       newItems.forEach(item => {
@@ -147,12 +207,11 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
       return Array.from(itemMap.values());
     });
     
-    // In a real app, you would trigger a bulk sync to API here.
-    if(API_URL) alert("Note: Imported items are currently local only. Use 'Inward' to save to Sheet.");
+    if(apiUrl) alert("Note: Imported items are currently local only. Use 'Inward' to save to Sheet.");
   };
 
   const processInward = async ({ itemCode, quantity, supplier, newItemDetails }: { itemCode: string; quantity: number; supplier: string; newItemDetails?: Partial<Item> }) => {
-    if (API_URL) {
+    if (apiUrl) {
       await postToApi({ 
         action: 'inward', 
         itemCode, 
@@ -162,7 +221,6 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
       });
       await fetchData();
     } else {
-      // Local Fallback
       await new Promise(resolve => setTimeout(resolve, 500));
       let currentItem = items.find(i => i.code === itemCode);
       let stockAfter = quantity;
@@ -201,20 +259,15 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
   };
 
   const processBulkInward = async (entries: InwardEntry[]) => {
-    if (API_URL) {
-      const response = await fetch(API_URL, {
-        method: 'POST',
-        body: JSON.stringify({ action: 'bulkInward', entries })
-      });
-      const result = await response.json();
+    if (apiUrl) {
+      const result = await postToApi({ action: 'bulkInward', entries });
       await fetchData();
       return { 
-        successCount: result.successCount || 0, 
-        errorCount: result.errorCount || 0, 
-        errors: result.errors || [] 
+        successCount: result?.successCount || 0, 
+        errorCount: result?.errorCount || 0, 
+        errors: result?.errors || [] 
       };
     } else {
-      // Local Logic
       await new Promise(resolve => setTimeout(resolve, 1500));
       let successCount = 0;
       let errorCount = 0;
@@ -275,7 +328,7 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
   };
 
   const processOutward = async ({ itemCode, quantity, customer }: { itemCode: string; quantity: number; customer: string }) => {
-    if (API_URL) {
+    if (apiUrl) {
       await postToApi({ action: 'outward', itemCode, quantity, customer });
       await fetchData();
     } else {
@@ -323,7 +376,22 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
   };
 
   return (
-    <InventoryContext.Provider value={{ items, logs, loading, addItem, updateItem, importItems, processInward, processBulkInward, processOutward, exportData, adjustStock }}>
+    <InventoryContext.Provider value={{ 
+      items, 
+      logs, 
+      loading, 
+      isConnected: !!apiUrl,
+      connectionError,
+      addItem, 
+      updateItem, 
+      importItems, 
+      processInward, 
+      processBulkInward, 
+      processOutward, 
+      exportData, 
+      adjustStock,
+      setConnectionUrl 
+    }}>
       {children}
     </InventoryContext.Provider>
   );

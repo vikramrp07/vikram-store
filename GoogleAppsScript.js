@@ -10,22 +10,36 @@
 const SHEET_ID = ""; // Optional: Leave empty if script is bound to the sheet, otherwise paste Sheet ID.
 
 function doGet(e) {
-  const op = e.parameter.action;
-  
-  if (op === 'getItems') {
-    return getItems();
-  } else if (op === 'getLogs') {
-    return getLogs();
+  // SAFEGUARD: Wrap everything in try-catch to ensure JSON is returned even on crash.
+  // This prevents "Failed to fetch" CORS errors when the script throws an exception.
+  try {
+    if (!e || !e.parameter) {
+      return ContentService.createTextOutput("SUCCESS: The script is valid. Please Deploy this as a Web App and use the URL.");
+    }
+
+    const op = e.parameter.action;
+    
+    if (op === 'getItems') {
+      return getItems();
+    } else if (op === 'getLogs') {
+      return getLogs();
+    }
+    
+    return response({ status: 'error', message: 'Invalid action' });
+  } catch (err) {
+    return response({ status: 'error', message: err.toString() });
   }
-  
-  return response({ status: 'error', message: 'Invalid action' });
 }
 
 function doPost(e) {
-  const data = JSON.parse(e.postData.contents);
-  const action = data.action;
-
   try {
+    if (!e || !e.postData) {
+      return ContentService.createTextOutput("Error: doPost must be called with JSON data via HTTP POST.");
+    }
+
+    const data = JSON.parse(e.postData.contents);
+    const action = data.action;
+
     if (action === 'inward') {
       return handleInward(data);
     } else if (action === 'bulkInward') {
@@ -47,7 +61,11 @@ function doPost(e) {
 
 function getItems() {
   const sheet = getSheet('Master');
+  if (!sheet) throw new Error("Sheet 'Master' not found. Please run setup() function.");
+  
   const rows = sheet.getDataRange().getValues();
+  if (rows.length < 1) return response({ status: 'success', data: [] });
+  
   const headers = rows.shift(); // Remove header
   
   const items = rows.map(r => ({
@@ -64,7 +82,11 @@ function getItems() {
 
 function getLogs() {
   const sheet = getSheet('Logs');
+  if (!sheet) throw new Error("Sheet 'Logs' not found. Please run setup() function.");
+
   const rows = sheet.getDataRange().getValues();
+  if (rows.length < 1) return response({ status: 'success', data: [] });
+
   rows.shift(); // Remove header
   
   // Sort by date desc (assuming date is col 0) - Limit to last 500 for performance
@@ -263,8 +285,6 @@ function handleUpdateItem(data) {
       if (data.updates.uom) sheet.getRange(row, 4).setValue(data.updates.uom);
       if (data.updates.currentStock !== undefined) {
          sheet.getRange(row, 6).setValue(data.updates.currentStock);
-         // Log adjustment if explicit stock update via Master (not Inward/Outward flow)
-         // Not implemented in this simple handler but good practice.
       }
       return response({ status: 'success' });
     }
