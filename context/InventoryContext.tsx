@@ -1,12 +1,14 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Item, LogEntry, TransactionType } from '../types';
+import { Item, LogEntry, TransactionType, InwardEntry } from '../types';
 
 interface InventoryContextType {
   items: Item[];
   logs: LogEntry[];
   addItem: (item: Item) => void;
   updateItem: (code: string, updates: Partial<Item>) => void;
+  importItems: (newItems: Item[]) => void;
   processInward: (data: { itemCode: string; quantity: number; supplier: string; newItemDetails?: Partial<Item> }) => Promise<void>;
+  processBulkInward: (entries: InwardEntry[]) => Promise<{ successCount: number; errorCount: number; errors: string[] }>;
   processOutward: (data: { itemCode: string; quantity: number; customer: string }) => Promise<void>;
   exportData: () => void;
 }
@@ -36,6 +38,29 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
 
   const updateItem = (code: string, updates: Partial<Item>) => {
     setItems(prev => prev.map(item => item.code === code ? { ...item, ...updates } : item));
+  };
+
+  const importItems = (newItems: Item[]) => {
+    setItems(prevItems => {
+      const itemMap = new Map(prevItems.map(i => [i.code, i]));
+      
+      newItems.forEach(item => {
+        if (item.code) {
+          const existing = itemMap.get(item.code);
+          if (existing) {
+            // Update existing item fields, keep current stock if not explicitly meant to overwrite,
+            // but for master import usually we want to update metadata. 
+            // If "Current Stock" is in Excel, it overwrites.
+            itemMap.set(item.code, { ...existing, ...item });
+          } else {
+            // Add new item
+            itemMap.set(item.code, item);
+          }
+        }
+      });
+      
+      return Array.from(itemMap.values());
+    });
   };
 
   const processInward = async ({ itemCode, quantity, supplier, newItemDetails }: { itemCode: string; quantity: number; supplier: string; newItemDetails?: Partial<Item> }) => {
@@ -77,6 +102,77 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
     };
 
     setLogs(prev => [newLog, ...prev]);
+  };
+
+  const processBulkInward = async (entries: InwardEntry[]) => {
+    // Simulate Batch Network Delay
+    await new Promise(resolve => setTimeout(resolve, 1500));
+
+    let successCount = 0;
+    let errorCount = 0;
+    const errors: string[] = [];
+    const newLogs: LogEntry[] = [];
+    
+    // We update state based on current items to ensure we handle the batch atomically
+    let currentItemsMap = new Map(items.map(i => [i.code, i]));
+
+    entries.forEach((entry, index) => {
+      try {
+        if (!entry.itemCode || !entry.quantity || !entry.supplier) {
+           throw new Error(`Row ${index + 1}: Missing required fields`);
+        }
+        
+        const existingItem = currentItemsMap.get(entry.itemCode);
+        let stockAfter = entry.quantity;
+        let itemName = 'Unknown';
+
+        if (existingItem) {
+          stockAfter = existingItem.currentStock + entry.quantity;
+          const updatedItem = { ...existingItem, currentStock: stockAfter };
+          currentItemsMap.set(entry.itemCode, updatedItem);
+          itemName = existingItem.name;
+        } else {
+          // New Item Logic for Bulk
+          if (entry.newItemDetails && entry.newItemDetails.name) {
+             const newItem: Item = {
+               code: entry.itemCode,
+               name: entry.newItemDetails.name,
+               category: entry.newItemDetails.category || 'General',
+               uom: entry.newItemDetails.uom || 'pcs',
+               openingStock: 0,
+               currentStock: entry.quantity
+             };
+             currentItemsMap.set(entry.itemCode, newItem);
+             stockAfter = entry.quantity;
+             itemName = newItem.name;
+          } else {
+            throw new Error(`Row ${index + 1}: Item '${entry.itemCode}' not found and no name provided.`);
+          }
+        }
+
+        newLogs.push({
+          id: Date.now().toString() + Math.random().toString().slice(2, 8),
+          date: new Date().toISOString(),
+          itemCode: entry.itemCode,
+          itemName: itemName,
+          type: TransactionType.INWARD,
+          quantity: entry.quantity,
+          partyName: entry.supplier,
+          stockAfter
+        });
+
+        successCount++;
+      } catch (err: any) {
+        errorCount++;
+        errors.push(err.message);
+      }
+    });
+
+    // Update States
+    setItems(Array.from(currentItemsMap.values()));
+    setLogs(prev => [...newLogs, ...prev]);
+
+    return { successCount, errorCount, errors };
   };
 
   const processOutward = async ({ itemCode, quantity, customer }: { itemCode: string; quantity: number; customer: string }) => {
@@ -132,7 +228,7 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
   };
 
   return (
-    <InventoryContext.Provider value={{ items, logs, addItem, updateItem, processInward, processOutward, exportData }}>
+    <InventoryContext.Provider value={{ items, logs, addItem, updateItem, importItems, processInward, processBulkInward, processOutward, exportData }}>
       {children}
     </InventoryContext.Provider>
   );

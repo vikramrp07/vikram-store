@@ -37,7 +37,7 @@ const App: React.FC = () => {
           <div className="bg-blue-600 p-2 rounded-lg mr-3">
              <Box className="text-white" size={24} />
           </div>
-          <h1 className="text-xl font-bold text-gray-800">InventoryFlow</h1>
+          <h1 className="text-xl font-bold text-gray-800">VIKRAM STORE</h1>
         </div>
         <nav className="flex-1 p-4 space-y-2">
           {navItems.map((item) => (
@@ -67,7 +67,7 @@ const App: React.FC = () => {
       <div className="md:hidden fixed w-full z-20 bg-white border-b border-gray-200 p-4 flex justify-between items-center">
         <div className="flex items-center">
           <Box className="text-blue-600 mr-2" size={24} />
-          <h1 className="text-lg font-bold text-gray-800">InventoryFlow</h1>
+          <h1 className="text-lg font-bold text-gray-800">VIKRAM STORE</h1>
         </div>
         <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="text-gray-600">
           {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}

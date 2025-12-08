@@ -30,6 +30,17 @@ export interface DashboardStats {
   recentActivityCount: number;
 }
 
+export interface InwardEntry {
+  itemCode: string;
+  quantity: number;
+  supplier: string;
+  newItemDetails?: {
+    name?: string;
+    category?: string;
+    uom?: string;
+  };
+}
+
 export const CATEGORIES = [
   'Electronics',
   'Furniture',
