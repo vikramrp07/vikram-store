@@ -1,16 +1,17 @@
 import React, { useState } from 'react';
 import { useInventory } from '../context/InventoryContext';
-import { Download, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
+import { Download, ArrowDownLeft, ArrowUpRight, Calendar } from 'lucide-react';
 
 export const Logs: React.FC = () => {
-  const { logs, exportData } = useInventory();
+  const { logs, exportData, exportDailyReport } = useInventory();
   const [filterType, setFilterType] = useState('ALL');
+  const [reportDate, setReportDate] = useState(new Date().toISOString().split('T')[0]);
 
   const filteredLogs = logs.filter(log => filterType === 'ALL' || log.type === filterType);
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="flex space-x-2">
           <button 
             onClick={() => setFilterType('ALL')}
@@ -32,13 +33,31 @@ export const Logs: React.FC = () => {
           </button>
         </div>
 
-        <button 
-          onClick={exportData}
-          className="flex items-center space-x-2 bg-white hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg border border-gray-200 text-sm font-medium transition-colors shadow-sm"
-        >
-          <Download size={16} />
-          <span>Export CSV</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center bg-white border border-gray-200 rounded-lg px-3 py-2 shadow-sm">
+            <Calendar size={16} className="text-gray-500 mr-2" />
+            <input 
+              type="date" 
+              value={reportDate}
+              onChange={(e) => setReportDate(e.target.value)}
+              className="text-sm text-gray-700 outline-none bg-transparent"
+            />
+          </div>
+          <button 
+            onClick={() => exportDailyReport(new Date(reportDate))}
+            className="flex items-center space-x-2 bg-blue-50 hover:bg-blue-100 text-blue-700 px-4 py-2 rounded-lg border border-blue-200 text-sm font-medium transition-colors shadow-sm"
+          >
+            <Download size={16} />
+            <span>Daily Report</span>
+          </button>
+          <button 
+            onClick={exportData}
+            className="flex items-center space-x-2 bg-white hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg border border-gray-200 text-sm font-medium transition-colors shadow-sm"
+          >
+            <Download size={16} />
+            <span>Export All</span>
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">

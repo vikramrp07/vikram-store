@@ -20,6 +20,7 @@ interface InventoryContextType {
   processBulkInward: (entries: InwardEntry[]) => Promise<{ successCount: number; errorCount: number; errors: string[] }>;
   processOutward: (data: { itemCode: string; quantity: number; customer: string }) => Promise<void>;
   exportData: () => void;
+  exportDailyReport: (date: Date) => void;
   adjustStock: (code: string, newQty: number, reason: string) => Promise<void>;
   setConnectionUrl: (url: string) => void;
 }
@@ -193,7 +194,10 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
 
   const importItems = (newItems: Item[]) => {
     setItems(prevItems => {
-      const itemMap = new Map(prevItems.map(i => [i.code, i]));
+      // Correctly type the Map to avoid inference issues with .map returning (string | Item)[]
+      const itemMap = new Map<string, Item>();
+      prevItems.forEach(i => itemMap.set(i.code, i));
+
       newItems.forEach(item => {
         if (item.code) {
           const existing = itemMap.get(item.code);
@@ -273,7 +277,10 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
       let errorCount = 0;
       const errors: string[] = [];
       const newLogs: LogEntry[] = [];
-      let currentItemsMap = new Map(items.map(i => [i.code, i]));
+      
+      // Correctly type the Map to avoid inference issues
+      const currentItemsMap = new Map<string, Item>();
+      items.forEach(i => currentItemsMap.set(i.code, i));
 
       entries.forEach((entry, index) => {
         try {
@@ -375,6 +382,43 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
     document.body.removeChild(link);
   };
 
+  const exportDailyReport = (date: Date) => {
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(date);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const dailyLogs = logs.filter(log => {
+      const logDate = new Date(log.date);
+      return logDate >= startOfDay && logDate <= endOfDay;
+    });
+
+    if (dailyLogs.length === 0) {
+      alert("No transactions found for the selected date.");
+      return;
+    }
+
+    const headers = ["Date", "Type", "Item Code", "Name", "Quantity", "Party", "Stock After"];
+    const rows = dailyLogs.map(log => [
+      new Date(log.date).toLocaleString(),
+      log.type,
+      log.itemCode,
+      log.itemName,
+      log.quantity,
+      log.partyName,
+      log.stockAfter
+    ]);
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    const dateString = date.toISOString().split('T')[0];
+    link.setAttribute("download", `daily_report_${dateString}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <InventoryContext.Provider value={{ 
       items, 
@@ -389,6 +433,7 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
       processBulkInward, 
       processOutward, 
       exportData, 
+      exportDailyReport,
       adjustStock,
       setConnectionUrl 
     }}>

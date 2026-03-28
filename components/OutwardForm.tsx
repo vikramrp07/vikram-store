@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useInventory } from '../context/InventoryContext';
-import { LogOut, CheckCircle, AlertCircle, Package } from 'lucide-react';
+import { LogOut, CheckCircle, AlertCircle, Package, Search, X, ChevronDown } from 'lucide-react';
+import { Item } from '../types';
 
 export const OutwardForm: React.FC = () => {
   const { items, processOutward } = useInventory();
@@ -8,6 +9,7 @@ export const OutwardForm: React.FC = () => {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
+  // Form State
   const [itemCode, setItemCode] = useState('');
   const [itemName, setItemName] = useState('');
   const [qty, setQty] = useState('');
@@ -15,13 +17,40 @@ export const OutwardForm: React.FC = () => {
   const [currentStock, setCurrentStock] = useState<number>(0);
   const [uom, setUom] = useState('');
 
-  // Auto-fill and Context Validation
+  // Search/Dropdown State
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showDropdown, setShowDropdown] = useState(false);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+
+  // Filter items based on search term
+  const filteredItems = items.filter(i => 
+    i.code.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    i.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Auto-fill and Context Validation based on itemCode
   useEffect(() => {
     const foundItem = items.find(i => i.code === itemCode);
     if (foundItem) {
       setItemName(foundItem.name);
       setCurrentStock(foundItem.currentStock);
       setUom(foundItem.uom);
+      
+      // If the user hasn't typed a custom search term (e.g. initially selecting), sync search term
+      if (!searchTerm) {
+         setSearchTerm(`${foundItem.code} - ${foundItem.name}`);
+      }
       
       // Re-validate current quantity against new stock level
       if (qty && Number(qty) > foundItem.currentStock) {
@@ -36,6 +65,20 @@ export const OutwardForm: React.FC = () => {
       setError(null);
     }
   }, [itemCode, items]);
+
+  const handleSelectItem = (item: Item) => {
+    setItemCode(item.code);
+    setSearchTerm(`${item.code} - ${item.name}`);
+    setShowDropdown(false);
+    setError(null);
+  };
+
+  const clearSelection = () => {
+    setItemCode('');
+    setSearchTerm('');
+    setQty('');
+    setShowDropdown(true); // Re-open dropdown for new search
+  };
 
   const handleQtyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
@@ -68,10 +111,13 @@ export const OutwardForm: React.FC = () => {
         customer,
       });
       setSuccess(true);
+      
       // Reset form
       setItemCode('');
+      setSearchTerm(''); // Clear search too
       setQty('');
       setCustomer('');
+      
       setTimeout(() => setSuccess(false), 3000);
     } catch (err: any) {
       setError(err.message || "Error processing outward");
@@ -101,26 +147,83 @@ export const OutwardForm: React.FC = () => {
         )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Select Item</label>
-            <select 
-              required
-              value={itemCode}
-              onChange={(e) => setItemCode(e.target.value)}
-              className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:outline-none bg-white transition-shadow"
-            >
-              <option value="">-- Choose Item --</option>
-              {items.map(i => <option key={i.code} value={i.code}>{i.code} - {i.name}</option>)}
-            </select>
+          
+          {/* Searchable Dropdown */}
+          <div className="relative" ref={searchContainerRef}>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Search & Select Item</label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Search className="text-gray-400" size={18} />
+              </div>
+              <input
+                type="text"
+                required
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setItemCode(''); // Clear selection if typing triggers change
+                  setShowDropdown(true);
+                }}
+                onFocus={() => setShowDropdown(true)}
+                placeholder="Type code or name..."
+                className={`w-full pl-10 pr-10 p-2.5 border rounded-lg focus:ring-2 focus:outline-none transition-shadow ${
+                   itemCode ? 'border-orange-500 ring-1 ring-orange-500 bg-orange-50' : 'border-gray-300 focus:ring-orange-500'
+                }`}
+              />
+              {itemCode ? (
+                <button 
+                  type="button" 
+                  onClick={clearSelection}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-red-500"
+                >
+                  <X size={18} />
+                </button>
+              ) : (
+                <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-gray-400">
+                  <ChevronDown size={18} />
+                </div>
+              )}
+            </div>
+
+            {/* Dropdown Results */}
+            {showDropdown && (
+              <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                {filteredItems.length === 0 ? (
+                  <div className="p-3 text-sm text-gray-500 text-center">No items found</div>
+                ) : (
+                  <ul>
+                    {filteredItems.map(item => (
+                      <li 
+                        key={item.code}
+                        onClick={() => handleSelectItem(item)}
+                        className={`px-4 py-3 cursor-pointer hover:bg-orange-50 transition-colors border-b border-gray-50 last:border-0 ${
+                          item.currentStock === 0 ? 'opacity-60 bg-gray-50' : ''
+                        }`}
+                      >
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <span className="block font-medium text-gray-800">{item.name}</span>
+                            <span className="text-xs text-gray-500">Code: {item.code}</span>
+                          </div>
+                          <div className={`text-sm font-semibold ${item.currentStock > 0 ? 'text-gray-700' : 'text-red-500'}`}>
+                            {item.currentStock} {item.uom}
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Item Name</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Item Name (Verified)</label>
             <input 
               type="text" 
               disabled
               value={itemName}
-              className="w-full p-2.5 border border-gray-200 rounded-lg bg-gray-50 text-gray-600"
+              className="w-full p-2.5 border border-gray-200 rounded-lg bg-gray-100 text-gray-500 cursor-not-allowed"
               placeholder="Auto-populated"
             />
           </div>
@@ -143,7 +246,7 @@ export const OutwardForm: React.FC = () => {
                  <span className={`block text-xs font-semibold uppercase tracking-wide ${itemCode ? 'text-gray-500' : 'text-gray-400'}`}>
                    Available Stock
                  </span>
-                 {!itemCode && <span className="text-xs text-gray-400">Select an item to view stock</span>}
+                 {!itemCode && <span className="text-xs text-gray-400">Search and select an item above</span>}
                </div>
              </div>
              
