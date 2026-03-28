@@ -149,7 +149,9 @@ export const InwardForm: React.FC = () => {
            const dateVal = r['date'] || r['date (yyyy-mm-dd)'];
            if (dateVal) {
              if (dateVal instanceof Date) {
-               dateStr = dateVal.toISOString().split('T')[0];
+               if (!isNaN(dateVal.getTime())) {
+                 dateStr = dateVal.toISOString().split('T')[0];
+               }
              } else {
                dateStr = String(dateVal).trim();
              }
@@ -180,9 +182,9 @@ export const InwardForm: React.FC = () => {
            if (fileInputRef.current) fileInputRef.current.value = '';
         }
 
-      } catch (error) {
+      } catch (error: any) {
         console.error(error);
-        alert("Failed to process file.");
+        alert(`Failed to process file: ${error.message || "Unknown error"}`);
       } finally {
         setBulkLoading(false);
       }
