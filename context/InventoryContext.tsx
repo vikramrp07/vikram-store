@@ -22,6 +22,8 @@ interface InventoryContextType {
   processBulkOutward: (entries: OutwardEntry[]) => Promise<{ successCount: number; errorCount: number; errors: string[] }>;
   exportData: () => void;
   exportDailyReport: (date: Date) => void;
+  exportWeeklyReport: (date: Date) => void;
+  exportMonthlyReport: (date: Date) => void;
   adjustStock: (code: string, newQty: number, reason: string) => Promise<void>;
   setConnectionUrl: (url: string) => void;
 }
@@ -474,6 +476,84 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
     document.body.removeChild(link);
   };
 
+  const exportWeeklyReport = (date: Date) => {
+    const startOfWeek = new Date(date);
+    startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay()); // Sunday
+    startOfWeek.setHours(0, 0, 0, 0);
+    
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(endOfWeek.getDate() + 6); // Saturday
+    endOfWeek.setHours(23, 59, 59, 999);
+
+    const weeklyLogs = logs.filter(log => {
+      const logDate = new Date(log.date);
+      return logDate >= startOfWeek && logDate <= endOfWeek;
+    });
+
+    if (weeklyLogs.length === 0) {
+      alert("No transactions found for the selected week.");
+      return;
+    }
+
+    const headers = ["Date", "Type", "Item Code", "Name", "Quantity", "Party", "Stock After"];
+    const rows = weeklyLogs.map(log => [
+      new Date(log.date).toLocaleString(),
+      log.type,
+      log.itemCode,
+      log.itemName,
+      log.quantity,
+      log.partyName,
+      log.stockAfter
+    ]);
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    const dateString = startOfWeek.toISOString().split('T')[0];
+    link.setAttribute("download", `weekly_report_week_of_${dateString}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const exportMonthlyReport = (date: Date) => {
+    const startOfMonth = new Date(date.getFullYear(), date.getMonth(), 1);
+    startOfMonth.setHours(0, 0, 0, 0);
+    
+    const endOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+    endOfMonth.setHours(23, 59, 59, 999);
+
+    const monthlyLogs = logs.filter(log => {
+      const logDate = new Date(log.date);
+      return logDate >= startOfMonth && logDate <= endOfMonth;
+    });
+
+    if (monthlyLogs.length === 0) {
+      alert("No transactions found for the selected month.");
+      return;
+    }
+
+    const headers = ["Date", "Type", "Item Code", "Name", "Quantity", "Party", "Stock After"];
+    const rows = monthlyLogs.map(log => [
+      new Date(log.date).toLocaleString(),
+      log.type,
+      log.itemCode,
+      log.itemName,
+      log.quantity,
+      log.partyName,
+      log.stockAfter
+    ]);
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    const dateString = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    link.setAttribute("download", `monthly_report_${dateString}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <InventoryContext.Provider value={{ 
       items, 
@@ -490,6 +570,8 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
       processBulkOutward,
       exportData, 
       exportDailyReport,
+      exportWeeklyReport,
+      exportMonthlyReport,
       adjustStock,
       setConnectionUrl 
     }}>

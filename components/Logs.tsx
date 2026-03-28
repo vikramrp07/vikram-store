@@ -3,7 +3,7 @@ import { useInventory } from '../context/InventoryContext';
 import { Download, ArrowDownLeft, ArrowUpRight, Calendar } from 'lucide-react';
 
 export const Logs: React.FC = () => {
-  const { logs, exportData, exportDailyReport } = useInventory();
+  const { logs, exportData, exportDailyReport, exportWeeklyReport, exportMonthlyReport } = useInventory();
   const [filterType, setFilterType] = useState('ALL');
   const [reportDate, setReportDate] = useState(new Date().toISOString().split('T')[0]);
 
@@ -48,14 +48,28 @@ export const Logs: React.FC = () => {
             className="flex items-center space-x-2 bg-blue-50 hover:bg-blue-100 text-blue-700 px-4 py-2 rounded-lg border border-blue-200 text-sm font-medium transition-colors shadow-sm"
           >
             <Download size={16} />
-            <span>Daily Report</span>
+            <span className="hidden sm:inline">Daily</span>
+          </button>
+          <button 
+            onClick={() => exportWeeklyReport(new Date(reportDate))}
+            className="flex items-center space-x-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-4 py-2 rounded-lg border border-emerald-200 text-sm font-medium transition-colors shadow-sm"
+          >
+            <Download size={16} />
+            <span className="hidden sm:inline">Weekly</span>
+          </button>
+          <button 
+            onClick={() => exportMonthlyReport(new Date(reportDate))}
+            className="flex items-center space-x-2 bg-purple-50 hover:bg-purple-100 text-purple-700 px-4 py-2 rounded-lg border border-purple-200 text-sm font-medium transition-colors shadow-sm"
+          >
+            <Download size={16} />
+            <span className="hidden sm:inline">Monthly</span>
           </button>
           <button 
             onClick={exportData}
             className="flex items-center space-x-2 bg-white hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg border border-gray-200 text-sm font-medium transition-colors shadow-sm"
           >
             <Download size={16} />
-            <span>Export All</span>
+            <span className="hidden sm:inline">Export All</span>
           </button>
         </div>
       </div>

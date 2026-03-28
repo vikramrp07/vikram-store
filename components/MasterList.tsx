@@ -7,9 +7,22 @@ import * as XLSX from 'xlsx';
 export const MasterList: React.FC = () => {
   const { items, updateItem, importItems, addItem, processInward } = useInventory();
   const [searchTerm, setSearchTerm] = useState('');
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Item>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Handle outside click for dropdown
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Add Item Modal State
   const [showAddModal, setShowAddModal] = useState(false);
@@ -19,7 +32,9 @@ export const MasterList: React.FC = () => {
     category: CATEGORIES[0],
     uom: UNITS[0],
     openingStock: 0,
-    currentStock: 0
+    currentStock: 0,
+    minStock: undefined,
+    maxStock: undefined
   });
 
   // Add Stock Modal State
@@ -50,12 +65,23 @@ export const MasterList: React.FC = () => {
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>, field: keyof Item) => {
-    setEditForm(prev => ({ ...prev, [field]: e.target.value }));
+    let value: any = e.target.value;
+    if (field === 'openingStock' || field === 'currentStock') {
+      value = e.target.value === '' ? 0 : Number(e.target.value);
+    } else if (field === 'minStock' || field === 'maxStock') {
+      value = e.target.value === '' ? undefined : Number(e.target.value);
+    }
+    setEditForm(prev => ({ ...prev, [field]: value }));
   };
 
-  // Handle changes in the "Add New Item" modal
   const handleAddNewChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>, field: keyof Item) => {
-    const value = field === 'openingStock' || field === 'currentStock' ? Number(e.target.value) : e.target.value;
+    let value: any = e.target.value;
+    if (field === 'openingStock' || field === 'currentStock') {
+      value = e.target.value === '' ? 0 : Number(e.target.value);
+    } else if (field === 'minStock' || field === 'maxStock') {
+      value = e.target.value === '' ? undefined : Number(e.target.value);
+    }
+    
     setNewItem(prev => ({
       ...prev,
       [field]: value,
@@ -86,7 +112,9 @@ export const MasterList: React.FC = () => {
       category: CATEGORIES[0],
       uom: UNITS[0],
       openingStock: 0,
-      currentStock: 0
+      currentStock: 0,
+      minStock: undefined,
+      maxStock: undefined
     });
   };
 
@@ -148,7 +176,9 @@ export const MasterList: React.FC = () => {
             category: normalizedRow['category'] || 'General',
             uom: normalizedRow['uom'] || normalizedRow['unit'] || 'pcs',
             openingStock: Number(normalizedRow['opening stock'] || normalizedRow['opening'] || 0),
-            currentStock: Number(normalizedRow['current stock'] || normalizedRow['stock'] || normalizedRow['quantity'] || normalizedRow['opening stock'] || 0)
+            currentStock: Number(normalizedRow['current stock'] || normalizedRow['stock'] || normalizedRow['quantity'] || normalizedRow['opening stock'] || 0),
+            minStock: normalizedRow['min stock'] !== undefined ? Number(normalizedRow['min stock']) : undefined,
+            maxStock: normalizedRow['max stock'] !== undefined ? Number(normalizedRow['max stock']) : undefined
           };
         }).filter(i => i.code && i.name); // Valid items only
 
@@ -206,15 +236,51 @@ export const MasterList: React.FC = () => {
             <span className="sm:hidden">Import</span>
           </button>
 
-          <div className="relative flex-1 md:flex-none md:w-64">
+          <div className="relative flex-1 md:flex-none md:w-64" ref={dropdownRef}>
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
             <input 
               type="text" 
               placeholder="Search item code or name..." 
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setIsDropdownOpen(true);
+              }}
+              onFocus={() => setIsDropdownOpen(true)}
+              className="w-full pl-9 pr-8 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow"
             />
+            {searchTerm && (
+              <button
+                onClick={() => {
+                  setSearchTerm('');
+                  setIsDropdownOpen(false);
+                }}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+              >
+                <X size={16} />
+              </button>
+            )}
+
+            {/* Dropdown */}
+            {isDropdownOpen && searchTerm && filteredItems.length > 0 && (
+              <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                <ul className="py-1">
+                  {filteredItems.map(item => (
+                    <li 
+                      key={item.code}
+                      onClick={() => {
+                        setSearchTerm(item.code);
+                        setIsDropdownOpen(false);
+                      }}
+                      className="px-4 py-2 hover:bg-blue-50 cursor-pointer text-sm text-gray-700 flex justify-between items-center"
+                    >
+                      <span className="font-medium">{item.code}</span>
+                      <span className="text-gray-500 truncate ml-2">{item.name}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -227,6 +293,8 @@ export const MasterList: React.FC = () => {
               <th className="p-4">Item Name</th>
               <th className="p-4">Category</th>
               <th className="p-4">UoM</th>
+              <th className="p-4 text-right">Min</th>
+              <th className="p-4 text-right">Max</th>
               <th className="p-4 text-right">Stock</th>
               <th className="p-4 text-center">Action</th>
             </tr>
@@ -234,7 +302,7 @@ export const MasterList: React.FC = () => {
           <tbody className="divide-y divide-gray-100">
             {filteredItems.length === 0 ? (
               <tr>
-                <td colSpan={6} className="p-12 text-center flex flex-col items-center justify-center text-gray-400">
+                <td colSpan={8} className="p-12 text-center flex flex-col items-center justify-center text-gray-400">
                   <UploadCloud size={48} className="mb-2 opacity-20" />
                   <p>No items found.</p>
                   <div className="flex justify-center gap-3 mt-2">
@@ -294,8 +362,42 @@ export const MasterList: React.FC = () => {
                     )}
                   </td>
 
+                  {/* Min Stock */}
+                  <td className="p-4 text-right">
+                    {editingId === item.code ? (
+                      <input 
+                        type="number"
+                        className="border p-1.5 rounded w-16 text-right focus:ring-2 focus:ring-blue-500 focus:outline-none" 
+                        value={editForm.minStock ?? item.minStock ?? ''} 
+                        onChange={(e) => handleChange(e, 'minStock')}
+                      />
+                    ) : (
+                      item.minStock !== undefined ? item.minStock : '-'
+                    )}
+                  </td>
+
+                  {/* Max Stock */}
+                  <td className="p-4 text-right">
+                    {editingId === item.code ? (
+                      <input 
+                        type="number"
+                        className="border p-1.5 rounded w-16 text-right focus:ring-2 focus:ring-blue-500 focus:outline-none" 
+                        value={editForm.maxStock ?? item.maxStock ?? ''} 
+                        onChange={(e) => handleChange(e, 'maxStock')}
+                      />
+                    ) : (
+                      item.maxStock !== undefined ? item.maxStock : '-'
+                    )}
+                  </td>
+
                   {/* Stock (Read Only) */}
-                  <td className={`p-4 text-right font-bold ${item.currentStock < 10 ? 'text-red-500' : 'text-gray-800'}`}>
+                  <td className={`p-4 text-right font-bold ${
+                    (item.minStock !== undefined && item.currentStock < item.minStock) || item.currentStock < 10 
+                      ? 'text-red-500' 
+                      : (item.maxStock !== undefined && item.currentStock > item.maxStock)
+                        ? 'text-orange-500'
+                        : 'text-gray-800'
+                  }`}>
                     {item.currentStock}
                   </td>
 
@@ -392,15 +494,37 @@ export const MasterList: React.FC = () => {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Opening Stock</label>
-                <input 
-                  type="number" 
-                  min="0"
-                  value={newItem.openingStock}
-                  onChange={(e) => handleAddNewChange(e, 'openingStock')}
-                  className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                />
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Opening Stock</label>
+                  <input 
+                    type="number" 
+                    min="0"
+                    value={newItem.openingStock}
+                    onChange={(e) => handleAddNewChange(e, 'openingStock')}
+                    className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Min Stock</label>
+                  <input 
+                    type="number" 
+                    min="0"
+                    value={newItem.minStock ?? ''}
+                    onChange={(e) => handleAddNewChange(e, 'minStock')}
+                    className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Max Stock</label>
+                  <input 
+                    type="number" 
+                    min="0"
+                    value={newItem.maxStock ?? ''}
+                    onChange={(e) => handleAddNewChange(e, 'maxStock')}
+                    className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  />
+                </div>
               </div>
 
               <div className="pt-2 flex space-x-3">

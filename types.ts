@@ -5,6 +5,8 @@ export interface Item {
   openingStock: number;
   currentStock: number;
   uom: string; // Unit of Measure
+  minStock?: number;
+  maxStock?: number;
 }
 
 export enum TransactionType {
