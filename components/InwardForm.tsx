@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useInventory } from '../context/InventoryContext';
-import { CATEGORIES, UNITS, InwardEntry } from '../types';
-import { Save, PlusCircle, CheckCircle, FileSpreadsheet, Download, Upload, AlertCircle } from 'lucide-react';
+import { CATEGORIES, UNITS, InwardEntry, Item } from '../types';
+import { Save, PlusCircle, CheckCircle, FileSpreadsheet, Download, Upload, AlertCircle, Package, Search, X } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 export const InwardForm: React.FC = () => {
@@ -21,6 +21,39 @@ export const InwardForm: React.FC = () => {
   const [uom, setUom] = useState(UNITS[0]);
   const [isNewItem, setIsNewItem] = useState(false);
   const [existingStock, setExistingStock] = useState<number | null>(null);
+  const [transactionDate, setTransactionDate] = useState(new Date().toISOString().split('T')[0]);
+
+  // Search State
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Filter items based on search term
+  const filteredItems = items.filter(i => 
+    i.code.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    i.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const exactMatch = items.find(i => i.code.toLowerCase() === searchTerm.toLowerCase());
+
+  const handleSelectItem = (item: Item) => {
+    setItemCode(item.code);
+    setSearchTerm('');
+  };
+
+  const handleAddNewItem = () => {
+    if (searchTerm.trim().length > 2) {
+      setItemCode(searchTerm.toUpperCase().trim());
+      setSearchTerm('');
+    } else {
+      alert("New item code must be at least 3 characters long.");
+    }
+  };
+
+  const clearSelection = () => {
+    setItemCode('');
+    setSearchTerm('');
+    setQty('');
+    setSupplier('');
+  };
 
   // Bulk Import State
   const [bulkFile, setBulkFile] = useState<File | null>(null);
@@ -54,6 +87,7 @@ export const InwardForm: React.FC = () => {
         itemCode,
         quantity: Number(qty),
         supplier,
+        date: transactionDate,
         newItemDetails: isNewItem ? { name: itemName, category, uom } : undefined
       });
       setSuccess(true);
@@ -61,6 +95,7 @@ export const InwardForm: React.FC = () => {
       setItemName('');
       setQty('');
       setSupplier('');
+      setTransactionDate(new Date().toISOString().split('T')[0]);
       setTimeout(() => setSuccess(false), 3000);
     } catch (err) {
       alert("Error processing inward: " + err);
@@ -72,8 +107,8 @@ export const InwardForm: React.FC = () => {
   // Handle Template Download
   const downloadTemplate = () => {
     const ws = XLSX.utils.json_to_sheet([
-      { 'Item Code': 'IT001', 'Quantity': 10, 'Supplier': 'Vendor A', 'Item Name (Optional)': '', 'Category (Optional)': '', 'UoM (Optional)': '' },
-      { 'Item Code': 'NEW001', 'Quantity': 50, 'Supplier': 'Vendor B', 'Item Name (Optional)': 'New Widget', 'Category (Optional)': 'Electronics', 'UoM (Optional)': 'pcs' }
+      { 'Item Code': 'IT001', 'Quantity': 10, 'Supplier': 'Vendor A', 'Date (YYYY-MM-DD)': '2023-10-27', 'Item Name': '', 'Category': '', 'UoM': '' },
+      { 'Item Code': 'NEW001', 'Quantity': 50, 'Supplier': 'Vendor B', 'Date (YYYY-MM-DD)': '', 'Item Name': 'New Widget', 'Category': 'Electronics', 'UoM': 'pcs' }
     ]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Inward_Template");
@@ -114,6 +149,7 @@ export const InwardForm: React.FC = () => {
              itemCode: r['item code'] || r['code'] || '',
              quantity: Number(r['quantity'] || r['qty'] || 0),
              supplier: r['supplier'] || r['vendor'] || r['party'] || '',
+             date: r['date'] || r['date (yyyy-mm-dd)'] || undefined,
              newItemDetails: {
                name: r['item name'] || r['name'] || r['item name (optional)'],
                category: r['category'] || r['category (optional)'],
@@ -184,116 +220,217 @@ export const InwardForm: React.FC = () => {
 
         {activeTab === 'single' ? (
           <form onSubmit={handleSubmit} className="p-6 space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Item Code</label>
-                <input 
-                  type="text" 
-                  list="item-codes"
-                  required
-                  value={itemCode}
-                  onChange={(e) => setItemCode(e.target.value.toUpperCase())}
-                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                  placeholder="Scan or type code"
-                />
-                <datalist id="item-codes">
-                  {items.map(i => <option key={i.code} value={i.code} />)}
-                </datalist>
-                {isNewItem && itemCode.length > 2 && (
-                  <p className="text-xs text-blue-600 mt-1">New Item Detected - Please fill details</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Item Name</label>
-                <input 
-                  type="text" 
-                  required
-                  value={itemName}
-                  readOnly={!isNewItem}
-                  onChange={(e) => setItemName(e.target.value)}
-                  className={`w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none ${!isNewItem ? 'bg-gray-100' : ''}`}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-                <select 
-                  disabled={!isNewItem}
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 bg-white disabled:bg-gray-100"
-                >
-                  {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
-
-              <div>
-                 <label className="block text-sm font-medium text-gray-700 mb-1">Unit (UoM)</label>
-                 <select
-                   disabled={!isNewItem}
-                   value={uom}
-                   onChange={(e) => setUom(e.target.value)}
-                   className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 bg-white disabled:bg-gray-100"
-                 >
-                    {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
-                 </select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t pt-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Quantity In</label>
-                <input 
-                  type="number" 
-                  required
-                  min="1"
-                  value={qty}
-                  onChange={(e) => setQty(e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                />
-                {existingStock !== null && (
-                  <p className="text-xs text-gray-500 mt-1">Current Stock: {existingStock}</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Supplier / Vendor</label>
-                <input 
-                  type="text" 
-                  required
-                  value={supplier}
-                  onChange={(e) => setSupplier(e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                  placeholder="e.g. Acme Corp"
-                />
-              </div>
-            </div>
-
-            <button 
-              type="submit"
-              disabled={loading}
-              className="w-full mt-4 bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-3 rounded-lg transition-colors flex justify-center items-center disabled:opacity-70"
-            >
-              {loading ? (
-                 <span className="flex items-center">Saving...</span>
-              ) : success ? (
-                 <span className="flex items-center"><CheckCircle className="mr-2"/> Stock Added Successfully</span>
+            <div className="space-y-4">
+              <label className="block text-sm font-medium text-gray-700">Search & Select Item</label>
+              
+              {!itemCode ? (
+                <div className="space-y-3">
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Search className="text-gray-400" size={18} />
+                    </div>
+                    <input
+                      type="text"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      placeholder="Search existing item or type new code..."
+                      className="w-full pl-10 pr-4 p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    />
+                  </div>
+                  
+                  <div className="border border-gray-200 rounded-lg max-h-60 overflow-y-auto bg-white">
+                    <table className="w-full text-left text-sm text-gray-600">
+                      <thead className="bg-gray-50 text-gray-800 sticky top-0 shadow-sm">
+                        <tr>
+                          <th className="p-3 font-medium">Item Code</th>
+                          <th className="p-3 font-medium">Name</th>
+                          <th className="p-3 text-right font-medium">Stock</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {searchTerm.trim().length > 2 && !exactMatch && (
+                          <tr 
+                            onClick={handleAddNewItem}
+                            className="cursor-pointer bg-emerald-50 hover:bg-emerald-100 transition-colors"
+                          >
+                            <td colSpan={3} className="p-3 font-medium text-emerald-700 flex items-center">
+                              <PlusCircle size={16} className="mr-2" />
+                              Add as new item: "{searchTerm.toUpperCase()}"
+                            </td>
+                          </tr>
+                        )}
+                        {filteredItems.length === 0 && (!searchTerm || searchTerm.trim().length <= 2) ? (
+                          <tr><td colSpan={3} className="p-4 text-center text-gray-500">Search to find items or type a new code</td></tr>
+                        ) : (
+                          filteredItems.map(item => (
+                            <tr 
+                              key={item.code} 
+                              onClick={() => handleSelectItem(item)}
+                              className="cursor-pointer hover:bg-emerald-50 transition-colors"
+                            >
+                              <td className="p-3 font-medium text-gray-900">{item.code}</td>
+                              <td className="p-3">{item.name}</td>
+                              <td className="p-3 text-right font-semibold text-gray-700">
+                                {item.currentStock} {item.uom}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               ) : (
-                 <span className="flex items-center"><Save className="mr-2" size={18}/> Save to Inventory</span>
+                <div className="flex justify-between items-center p-4 border border-emerald-200 bg-emerald-50 rounded-lg mb-4">
+                  <div className="flex items-center space-x-4">
+                    <div className="p-2 bg-white rounded-lg border border-emerald-100">
+                      <Package className="text-emerald-600" size={24} />
+                    </div>
+                    <div>
+                      <p className="text-base font-bold text-gray-900">
+                        {isNewItem ? 'New Item' : itemName}
+                      </p>
+                      <p className="text-sm text-gray-500">Code: {itemCode}</p>
+                    </div>
+                  </div>
+                  <button 
+                    type="button" 
+                    onClick={clearSelection}
+                    className="flex items-center space-x-1 text-sm text-emerald-600 hover:text-emerald-800 font-medium px-3 py-1.5 bg-white rounded-md border border-emerald-200 hover:bg-emerald-100 transition-colors"
+                  >
+                    <X size={16} />
+                    <span>Change Item</span>
+                  </button>
+                </div>
               )}
-            </button>
+            </div>
+
+            {itemCode && (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Item Name</label>
+                    <input 
+                      type="text" 
+                      required
+                      value={itemName}
+                      readOnly={!isNewItem}
+                      onChange={(e) => setItemName(e.target.value)}
+                      className={`w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none ${!isNewItem ? 'bg-gray-100' : ''}`}
+                      placeholder="Enter item name"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                    <select 
+                      disabled={!isNewItem}
+                      value={category}
+                      onChange={(e) => setCategory(e.target.value)}
+                      className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 bg-white disabled:bg-gray-100"
+                    >
+                      {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+
+                  <div>
+                     <label className="block text-sm font-medium text-gray-700 mb-1">Unit (UoM)</label>
+                     <select
+                       disabled={!isNewItem}
+                       value={uom}
+                       onChange={(e) => setUom(e.target.value)}
+                       className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 bg-white disabled:bg-gray-100"
+                     >
+                        {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                     </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t pt-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Transaction Date</label>
+                    <input 
+                      type="date" 
+                      required
+                      value={transactionDate}
+                      onChange={(e) => setTransactionDate(e.target.value)}
+                      className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Quantity In</label>
+                    <input 
+                      type="number" 
+                      required
+                      min="1"
+                      value={qty}
+                      onChange={(e) => setQty(e.target.value)}
+                      className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    />
+                    {existingStock !== null && (
+                      <p className="text-xs text-gray-500 mt-1">Current Stock: {existingStock}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Supplier / Vendor</label>
+                    <input 
+                      type="text" 
+                      required
+                      value={supplier}
+                      onChange={(e) => setSupplier(e.target.value)}
+                      className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                      placeholder="e.g. Acme Corp"
+                    />
+                  </div>
+                </div>
+
+                <button 
+                  type="submit"
+                  disabled={loading}
+                  className="w-full mt-4 bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-3 rounded-lg transition-colors flex justify-center items-center disabled:opacity-70"
+                >
+                  {loading ? (
+                     <span className="flex items-center">Saving...</span>
+                  ) : success ? (
+                     <span className="flex items-center"><CheckCircle className="mr-2"/> Stock Added Successfully</span>
+                  ) : (
+                     <span className="flex items-center"><Save className="mr-2" size={18}/> Save to Inventory</span>
+                  )}
+                </button>
+              </>
+            )}
           </form>
         ) : (
           <div className="p-6 space-y-6">
-            <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 text-sm text-blue-800">
-              <p className="font-semibold mb-1">Instructions:</p>
-              <ul className="list-disc pl-5 space-y-1">
-                <li>Download the template below.</li>
-                <li>Fill in <strong>Item Code</strong>, <strong>Quantity</strong>, and <strong>Supplier</strong> (Required).</li>
-                <li>For new items, also fill Name, Category, and UoM.</li>
-                <li>Upload the file to process inward entries in bulk.</li>
-              </ul>
+            <div className="bg-blue-50 border border-blue-100 rounded-lg p-5 text-sm text-blue-900">
+              <div className="flex items-center mb-3">
+                <AlertCircle className="text-blue-600 mr-2" size={20} />
+                <h3 className="font-bold text-base">Bulk Import Instructions</h3>
+              </div>
+              <p className="mb-3 text-blue-800">Upload an Excel (.xlsx) or CSV file with the following columns. Use the <strong>Download Template</strong> button for a pre-formatted file.</p>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-2">
+                <div className="bg-white bg-opacity-60 p-3 rounded border border-blue-100">
+                  <h4 className="font-semibold text-blue-800 border-b border-blue-200 pb-1 mb-2">Required Columns</h4>
+                  <ul className="space-y-1">
+                    <li><code className="bg-blue-100 px-1 rounded text-blue-800">Item Code</code>: Unique identifier</li>
+                    <li><code className="bg-blue-100 px-1 rounded text-blue-800">Quantity</code>: Amount to add</li>
+                    <li><code className="bg-blue-100 px-1 rounded text-blue-800">Supplier</code>: Vendor name</li>
+                  </ul>
+                </div>
+                <div className="bg-white bg-opacity-60 p-3 rounded border border-blue-100">
+                  <h4 className="font-semibold text-blue-800 border-b border-blue-200 pb-1 mb-2">Optional Fields</h4>
+                  <ul className="space-y-1">
+                    <li><code className="bg-blue-100 px-1 rounded text-blue-800">Date</code>: YYYY-MM-DD</li>
+                    <li><code className="bg-blue-100 px-1 rounded text-blue-800">Item Name</code>: Description (New items)</li>
+                    <li><code className="bg-blue-100 px-1 rounded text-blue-800">Category</code>: Item group (New items)</li>
+                    <li><code className="bg-blue-100 px-1 rounded text-blue-800">UoM</code>: Unit of Measure (New items)</li>
+                  </ul>
+                </div>
+              </div>
+              <p className="text-xs text-blue-700 mt-2 italic">Note: If an Item Code does not exist in the system, it will be automatically created using the optional fields provided.</p>
             </div>
 
             <div className="flex flex-col sm:flex-row gap-4">

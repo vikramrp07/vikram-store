@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Item, LogEntry, TransactionType, InwardEntry } from '../types';
+import { Item, LogEntry, TransactionType, InwardEntry, OutwardEntry } from '../types';
 
 // =========================================================================================
 // 🚀 CONFIGURATION: PASTE YOUR GOOGLE WEB APP URL BELOW
@@ -16,9 +16,10 @@ interface InventoryContextType {
   addItem: (item: Item) => Promise<void>;
   updateItem: (code: string, updates: Partial<Item>) => Promise<void>;
   importItems: (newItems: Item[]) => void;
-  processInward: (data: { itemCode: string; quantity: number; supplier: string; newItemDetails?: Partial<Item> }) => Promise<void>;
+  processInward: (data: { itemCode: string; quantity: number; supplier: string; date?: string; newItemDetails?: Partial<Item> }) => Promise<void>;
   processBulkInward: (entries: InwardEntry[]) => Promise<{ successCount: number; errorCount: number; errors: string[] }>;
-  processOutward: (data: { itemCode: string; quantity: number; customer: string }) => Promise<void>;
+  processOutward: (data: { itemCode: string; quantity: number; customer: string; date?: string }) => Promise<void>;
+  processBulkOutward: (entries: OutwardEntry[]) => Promise<{ successCount: number; errorCount: number; errors: string[] }>;
   exportData: () => void;
   exportDailyReport: (date: Date) => void;
   adjustStock: (code: string, newQty: number, reason: string) => Promise<void>;
@@ -214,13 +215,14 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
     if(apiUrl) alert("Note: Imported items are currently local only. Use 'Inward' to save to Sheet.");
   };
 
-  const processInward = async ({ itemCode, quantity, supplier, newItemDetails }: { itemCode: string; quantity: number; supplier: string; newItemDetails?: Partial<Item> }) => {
+  const processInward = async ({ itemCode, quantity, supplier, date, newItemDetails }: { itemCode: string; quantity: number; supplier: string; date?: string; newItemDetails?: Partial<Item> }) => {
     if (apiUrl) {
       await postToApi({ 
         action: 'inward', 
         itemCode, 
         quantity, 
         supplier, 
+        date,
         newItemDetails 
       });
       await fetchData();
@@ -250,7 +252,7 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
 
       const newLog: LogEntry = {
         id: Date.now().toString(),
-        date: new Date().toISOString(),
+        date: date ? new Date(date).toISOString() : new Date().toISOString(),
         itemCode,
         itemName: currentItem ? currentItem.name : 'Unknown',
         type: TransactionType.INWARD,
@@ -313,7 +315,7 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
 
           newLogs.push({
             id: Date.now().toString() + Math.random(),
-            date: new Date().toISOString(),
+            date: entry.date ? new Date(entry.date).toISOString() : new Date().toISOString(),
             itemCode: entry.itemCode,
             itemName,
             type: TransactionType.INWARD,
@@ -334,9 +336,9 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
     }
   };
 
-  const processOutward = async ({ itemCode, quantity, customer }: { itemCode: string; quantity: number; customer: string }) => {
+  const processOutward = async ({ itemCode, quantity, customer, date }: { itemCode: string; quantity: number; customer: string; date?: string }) => {
     if (apiUrl) {
-      await postToApi({ action: 'outward', itemCode, quantity, customer });
+      await postToApi({ action: 'outward', itemCode, quantity, customer, date });
       await fetchData();
     } else {
       await new Promise(resolve => setTimeout(resolve, 500));
@@ -349,7 +351,7 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
 
       const newLog: LogEntry = {
         id: Date.now().toString(),
-        date: new Date().toISOString(),
+        date: date ? new Date(date).toISOString() : new Date().toISOString(),
         itemCode,
         itemName: currentItem.name,
         type: TransactionType.OUTWARD,
@@ -358,6 +360,59 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
         stockAfter
       };
       setLogs(prev => [newLog, ...prev]);
+    }
+  };
+
+  const processBulkOutward = async (entries: OutwardEntry[]) => {
+    if (apiUrl) {
+      const result = await postToApi({ action: 'bulkOutward', entries });
+      await fetchData();
+      return { 
+        successCount: result?.successCount || 0, 
+        errorCount: result?.errorCount || 0, 
+        errors: result?.errors || [] 
+      };
+    } else {
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      let successCount = 0;
+      let errorCount = 0;
+      const errors: string[] = [];
+      const newLogs: LogEntry[] = [];
+      
+      const currentItemsMap = new Map<string, Item>();
+      items.forEach(i => currentItemsMap.set(i.code, i));
+
+      entries.forEach((entry, index) => {
+        try {
+          if (!entry.itemCode || !entry.quantity || !entry.customer) throw new Error(`Row ${index + 1}: Missing fields`);
+          
+          const existingItem = currentItemsMap.get(entry.itemCode);
+          if (!existingItem) throw new Error(`Row ${index + 1}: Item not found`);
+          if (existingItem.currentStock < entry.quantity) throw new Error(`Row ${index + 1}: Insufficient stock`);
+
+          const stockAfter = existingItem.currentStock - entry.quantity;
+          currentItemsMap.set(entry.itemCode, { ...existingItem, currentStock: stockAfter });
+
+          newLogs.push({
+            id: Date.now().toString() + Math.random(),
+            date: entry.date ? new Date(entry.date).toISOString() : new Date().toISOString(),
+            itemCode: entry.itemCode,
+            itemName: existingItem.name,
+            type: TransactionType.OUTWARD,
+            quantity: entry.quantity,
+            partyName: entry.customer,
+            stockAfter
+          });
+          successCount++;
+        } catch (err: any) {
+          errorCount++;
+          errors.push(err.message);
+        }
+      });
+
+      setItems(Array.from(currentItemsMap.values()));
+      setLogs(prev => [...newLogs, ...prev]);
+      return { successCount, errorCount, errors };
     }
   };
 
@@ -432,6 +487,7 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
       processInward, 
       processBulkInward, 
       processOutward, 
+      processBulkOutward,
       exportData, 
       exportDailyReport,
       adjustStock,

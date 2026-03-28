@@ -46,6 +46,8 @@ function doPost(e) {
       return handleBulkInward(data);
     } else if (action === 'outward') {
       return handleOutward(data);
+    } else if (action === 'bulkOutward') {
+      return handleBulkOutward(data);
     } else if (action === 'addItem') {
       return handleAddItem(data);
     } else if (action === 'updateItem') {
@@ -146,7 +148,7 @@ function handleInward(data) {
   
   // Log it
   logs.appendRow([
-    new Date().toISOString(),
+    data.date ? new Date(data.date).toISOString() : new Date().toISOString(),
     'INWARD',
     data.itemCode,
     data.newItemDetails ? data.newItemDetails.name : (rowIndex !== -1 ? rows[rowIndex-1][1] : 'Unknown'),
@@ -206,7 +208,7 @@ function handleBulkInward(data) {
       }
       
       logs.appendRow([
-        new Date().toISOString(),
+        entry.date ? new Date(entry.date).toISOString() : new Date().toISOString(),
         'INWARD',
         entry.itemCode,
         itemName,
@@ -247,7 +249,7 @@ function handleOutward(data) {
   master.getRange(rowIndex, 6).setValue(newStock);
   
   logs.appendRow([
-    new Date().toISOString(),
+    data.date ? new Date(data.date).toISOString() : new Date().toISOString(),
     'OUTWARD',
     data.itemCode,
     rows[rowIndex-1][1], // Name
@@ -257,6 +259,58 @@ function handleOutward(data) {
   ]);
   
   return response({ status: 'success' });
+}
+
+function handleBulkOutward(data) {
+  // data.entries is array of outward objects
+  const ss = getSS();
+  const master = ss.getSheetByName('Master');
+  const logs = ss.getSheetByName('Logs');
+  const masterData = master.getDataRange().getValues();
+  
+  let success = 0;
+  let errors = [];
+  
+  // Map code to row index for O(1) lookup logic
+  let codeMap = {};
+  for(let i=1; i<masterData.length; i++) {
+    codeMap[masterData[i][0]] = i + 1;
+  }
+  
+  data.entries.forEach((entry, idx) => {
+    try {
+      let rowIndex = codeMap[entry.itemCode];
+      let finalStock = 0;
+      let itemName = "";
+      
+      if (rowIndex) {
+        let currentStock = master.getRange(rowIndex, 6).getValue();
+        if (Number(currentStock) < Number(entry.quantity)) {
+          throw new Error("Insufficient Stock");
+        }
+        finalStock = Number(currentStock) - Number(entry.quantity);
+        master.getRange(rowIndex, 6).setValue(finalStock);
+        itemName = master.getRange(rowIndex, 2).getValue();
+      } else {
+        throw new Error("Item not found");
+      }
+      
+      logs.appendRow([
+        entry.date ? new Date(entry.date).toISOString() : new Date().toISOString(),
+        'OUTWARD',
+        entry.itemCode,
+        itemName,
+        entry.quantity,
+        entry.customer,
+        finalStock
+      ]);
+      success++;
+    } catch (e) {
+      errors.push(`Row ${idx+1}: ${e.message}`);
+    }
+  });
+  
+  return response({ status: 'success', successCount: success, errorCount: errors.length, errors: errors });
 }
 
 function handleAddItem(data) {

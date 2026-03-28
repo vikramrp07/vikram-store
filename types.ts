@@ -34,11 +34,19 @@ export interface InwardEntry {
   itemCode: string;
   quantity: number;
   supplier: string;
+  date?: string; // Optional manual date
   newItemDetails?: {
     name?: string;
     category?: string;
     uom?: string;
   };
+}
+
+export interface OutwardEntry {
+  itemCode: string;
+  quantity: number;
+  customer: string;
+  date?: string; // Optional manual date
 }
 
 export const CATEGORIES = [

@@ -1,16 +1,21 @@
 import React, { useState } from 'react';
 import { useInventory } from '../context/InventoryContext';
 import { generateInventoryInsight } from '../services/geminiService';
-import { Package, AlertTriangle, Activity, TrendingUp, Sparkles, Loader2, RefreshCw } from 'lucide-react';
+import { Package, AlertTriangle, Activity, TrendingUp, Sparkles, Loader2, RefreshCw, Settings } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
 export const Dashboard: React.FC = () => {
   const { items, logs } = useInventory();
   const [insight, setInsight] = useState<string>('');
   const [loadingInsight, setLoadingInsight] = useState(false);
+  const [lowStockThreshold, setLowStockThreshold] = useState(() => {
+    const saved = localStorage.getItem('lowStockThreshold');
+    return saved ? parseInt(saved, 10) : 15;
+  });
+  const [isEditingThreshold, setIsEditingThreshold] = useState(false);
 
   const totalStock = items.reduce((acc, item) => acc + item.currentStock, 0);
-  const lowStockCount = items.filter(item => item.currentStock < 15).length;
+  const lowStockCount = items.filter(item => item.currentStock < lowStockThreshold).length;
   
   // Data for chart (Top 5 items by stock)
   const chartData = [...items]
@@ -47,13 +52,49 @@ export const Dashboard: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center space-x-4 transition-transform hover:scale-[1.02]">
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center space-x-4 transition-transform hover:scale-[1.02] relative">
           <div className="p-3 bg-red-100 text-red-600 rounded-full">
             <AlertTriangle size={24} />
           </div>
-          <div>
-            <p className="text-gray-500 text-sm">Low Stock Alerts</p>
+          <div className="flex-1">
+            <div className="flex justify-between items-center">
+              <p className="text-gray-500 text-sm">Low Stock Alerts</p>
+              <button 
+                onClick={() => setIsEditingThreshold(!isEditingThreshold)} 
+                className="text-gray-400 hover:text-gray-600 focus:outline-none"
+                title="Configure Threshold"
+              >
+                <Settings size={14} />
+              </button>
+            </div>
             <h3 className="text-2xl font-bold text-gray-800">{lowStockCount}</h3>
+            
+            {isEditingThreshold && (
+              <div className="absolute top-full right-0 mt-2 bg-white border border-gray-200 shadow-lg rounded-lg p-3 z-10 w-48 animate-fade-in">
+                <label className="block text-xs font-medium text-gray-700 mb-1">Alert Threshold</label>
+                <div className="flex items-center space-x-2">
+                  <input 
+                    type="number" 
+                    min="0"
+                    value={lowStockThreshold}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10);
+                      if (!isNaN(val) && val >= 0) {
+                        setLowStockThreshold(val);
+                        localStorage.setItem('lowStockThreshold', val.toString());
+                      }
+                    }}
+                    className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  <button 
+                    onClick={() => setIsEditingThreshold(false)}
+                    className="px-2 py-1.5 bg-blue-50 text-blue-600 rounded-md text-xs font-medium hover:bg-blue-100"
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

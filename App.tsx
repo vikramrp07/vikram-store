@@ -4,7 +4,8 @@ import { InwardForm } from './components/InwardForm';
 import { OutwardForm } from './components/OutwardForm';
 import { MasterList } from './components/MasterList';
 import { Logs } from './components/Logs';
-import { LayoutDashboard, ArrowDownCircle, ArrowUpCircle, Database, FileText, Menu, X, Box, Settings, Link as LinkIcon, CheckCircle, AlertTriangle } from 'lucide-react';
+import { StockHistory } from './components/StockHistory';
+import { LayoutDashboard, ArrowDownCircle, ArrowUpCircle, Database, FileText, Menu, X, Box, Settings, Link as LinkIcon, CheckCircle, AlertTriangle, History } from 'lucide-react';
 import { useInventory } from './context/InventoryContext';
 
 const App: React.FC = () => {
@@ -21,6 +22,7 @@ const App: React.FC = () => {
     { id: 'inward', label: 'Inward Stock', icon: ArrowDownCircle },
     { id: 'outward', label: 'Outward Stock', icon: ArrowUpCircle },
     { id: 'master', label: 'Master List', icon: Database },
+    { id: 'history', label: 'Stock History', icon: History },
     { id: 'logs', label: 'Transaction Logs', icon: FileText },
   ];
 
@@ -30,6 +32,7 @@ const App: React.FC = () => {
       case 'inward': return <InwardForm />;
       case 'outward': return <OutwardForm />;
       case 'master': return <MasterList />;
+      case 'history': return <StockHistory />;
       case 'logs': return <Logs />;
       default: return <Dashboard />;
     }
