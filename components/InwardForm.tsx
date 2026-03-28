@@ -129,7 +129,7 @@ export const InwardForm: React.FC = () => {
     reader.onload = async (e) => {
       try {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
+        const workbook = XLSX.read(data, { type: 'array', cellDates: true });
         const wsname = workbook.SheetNames[0];
         const ws = workbook.Sheets[wsname];
         const jsonData = XLSX.utils.sheet_to_json(ws);
@@ -145,15 +145,25 @@ export const InwardForm: React.FC = () => {
            const r: any = {};
            Object.keys(row).forEach(key => r[key.toLowerCase().trim()] = row[key]);
 
+           let dateStr = undefined;
+           const dateVal = r['date'] || r['date (yyyy-mm-dd)'];
+           if (dateVal) {
+             if (dateVal instanceof Date) {
+               dateStr = dateVal.toISOString().split('T')[0];
+             } else {
+               dateStr = String(dateVal).trim();
+             }
+           }
+
            return {
-             itemCode: r['item code'] || r['code'] || '',
+             itemCode: String(r['item code'] || r['code'] || '').trim(),
              quantity: Number(r['quantity'] || r['qty'] || 0),
-             supplier: r['supplier'] || r['vendor'] || r['party'] || '',
-             date: r['date'] || r['date (yyyy-mm-dd)'] || undefined,
+             supplier: String(r['supplier'] || r['vendor'] || r['party'] || '').trim(),
+             date: dateStr,
              newItemDetails: {
-               name: r['item name'] || r['name'] || r['item name (optional)'],
-               category: r['category'] || r['category (optional)'],
-               uom: r['uom'] || r['unit'] || r['uom (optional)']
+               name: r['item name'] || r['name'] || r['item name (optional)'] ? String(r['item name'] || r['name'] || r['item name (optional)']).trim() : undefined,
+               category: r['category'] || r['category (optional)'] ? String(r['category'] || r['category (optional)']).trim() : undefined,
+               uom: r['uom'] || r['unit'] || r['uom (optional)'] ? String(r['uom'] || r['unit'] || r['uom (optional)']).trim() : undefined
              }
            };
         });

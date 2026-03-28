@@ -146,7 +146,7 @@ export const OutwardForm: React.FC = () => {
     reader.onload = async (e) => {
       try {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
+        const workbook = XLSX.read(data, { type: 'array', cellDates: true });
         const wsname = workbook.SheetNames[0];
         const ws = workbook.Sheets[wsname];
         const jsonData = XLSX.utils.sheet_to_json(ws);
@@ -162,11 +162,21 @@ export const OutwardForm: React.FC = () => {
            const r: any = {};
            Object.keys(row).forEach(key => r[key.toLowerCase().trim()] = row[key]);
 
+           let dateStr = undefined;
+           const dateVal = r['date'] || r['date (yyyy-mm-dd)'];
+           if (dateVal) {
+             if (dateVal instanceof Date) {
+               dateStr = dateVal.toISOString().split('T')[0];
+             } else {
+               dateStr = String(dateVal).trim();
+             }
+           }
+
            return {
-             itemCode: r['item code'] || r['code'] || '',
+             itemCode: String(r['item code'] || r['code'] || '').trim(),
              quantity: Number(r['quantity'] || r['qty'] || 0),
-             customer: r['customer'] || r['project'] || r['department'] || r['party'] || '',
-             date: r['date'] || r['date (yyyy-mm-dd)'] || undefined,
+             customer: String(r['customer'] || r['project'] || r['department'] || r['party'] || '').trim(),
+             date: dateStr,
            };
         });
 

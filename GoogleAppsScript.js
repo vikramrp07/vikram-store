@@ -178,6 +178,10 @@ function handleBulkInward(data) {
   
   data.entries.forEach((entry, idx) => {
     try {
+      if (!entry.itemCode || !entry.quantity || !entry.supplier) {
+        throw new Error("Missing required fields (Item Code, Quantity, Supplier)");
+      }
+
       let rowIndex = codeMap[entry.itemCode];
       let finalStock = 0;
       let itemName = "";
@@ -279,6 +283,10 @@ function handleBulkOutward(data) {
   
   data.entries.forEach((entry, idx) => {
     try {
+      if (!entry.itemCode || !entry.quantity || !entry.customer) {
+        throw new Error("Missing required fields (Item Code, Quantity, Customer)");
+      }
+
       let rowIndex = codeMap[entry.itemCode];
       let finalStock = 0;
       let itemName = "";
