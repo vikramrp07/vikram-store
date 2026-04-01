@@ -76,7 +76,9 @@ function getItems() {
     category: r[2],
     uom: r[3],
     openingStock: Number(r[4]),
-    currentStock: Number(r[5])
+    currentStock: Number(r[5]),
+    minStock: r[6] !== "" && r[6] != null ? Number(r[6]) : null,
+    maxStock: r[7] !== "" && r[7] != null ? Number(r[7]) : null
   })).filter(i => i.code && i.code !== "");
   
   return response({ status: 'success', data: items });
@@ -133,7 +135,9 @@ function handleInward(data) {
          data.newItemDetails.category, 
          data.newItemDetails.uom, 
          0, 
-         data.quantity
+         data.quantity,
+         data.newItemDetails.minStock != null ? data.newItemDetails.minStock : "",
+         data.newItemDetails.maxStock != null ? data.newItemDetails.maxStock : ""
        ]);
        currentStock = 0; // Opening
     } else {
@@ -202,7 +206,9 @@ function handleBulkInward(data) {
           entry.newItemDetails.category || 'General',
           entry.newItemDetails.uom || 'pcs',
           0,
-          entry.quantity
+          entry.quantity,
+          entry.newItemDetails.minStock != null ? entry.newItemDetails.minStock : "",
+          entry.newItemDetails.maxStock != null ? entry.newItemDetails.maxStock : ""
         ]);
         finalStock = entry.quantity;
         itemName = entry.newItemDetails.name;
@@ -329,7 +335,9 @@ function handleAddItem(data) {
     data.item.category,
     data.item.uom,
     data.item.openingStock,
-    data.item.currentStock
+    data.item.currentStock,
+    data.item.minStock != null ? data.item.minStock : "",
+    data.item.maxStock != null ? data.item.maxStock : ""
   ]);
   return response({ status: 'success' });
 }
@@ -348,6 +356,8 @@ function handleUpdateItem(data) {
       if (data.updates.currentStock !== undefined) {
          sheet.getRange(row, 6).setValue(data.updates.currentStock);
       }
+      if (data.updates.minStock !== undefined) sheet.getRange(row, 7).setValue(data.updates.minStock === null ? "" : data.updates.minStock);
+      if (data.updates.maxStock !== undefined) sheet.getRange(row, 8).setValue(data.updates.maxStock === null ? "" : data.updates.maxStock);
       return response({ status: 'success' });
     }
   }
@@ -374,7 +384,7 @@ function setup() {
   
   if (!ss.getSheetByName('Master')) {
     const s = ss.insertSheet('Master');
-    s.appendRow(['Item Code', 'Name', 'Category', 'UoM', 'Opening Stock', 'Current Stock']);
+    s.appendRow(['Item Code', 'Name', 'Category', 'UoM', 'Opening Stock', 'Current Stock', 'Min Stock', 'Max Stock']);
   }
   
   if (!ss.getSheetByName('Logs')) {

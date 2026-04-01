@@ -5,8 +5,8 @@ export interface Item {
   openingStock: number;
   currentStock: number;
   uom: string; // Unit of Measure
-  minStock?: number;
-  maxStock?: number;
+  minStock?: number | null;
+  maxStock?: number | null;
 }
 
 export enum TransactionType {
@@ -41,6 +41,8 @@ export interface InwardEntry {
     name?: string;
     category?: string;
     uom?: string;
+    minStock?: number | null;
+    maxStock?: number | null;
   };
 }
 

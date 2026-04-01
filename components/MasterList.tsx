@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { useInventory } from '../context/InventoryContext';
-import { Search, Edit2, Save, X, UploadCloud, FileSpreadsheet, Plus, ArrowDownCircle, Loader2 } from 'lucide-react';
+import { Search, Edit2, Save, X, UploadCloud, FileSpreadsheet, Plus, ArrowDownCircle, Loader2, AlertCircle } from 'lucide-react';
 import { Item, CATEGORIES, UNITS } from '../types';
 import * as XLSX from 'xlsx';
 
@@ -39,7 +39,7 @@ export const MasterList: React.FC = () => {
 
   // Add Stock Modal State
   const [showStockModal, setShowStockModal] = useState(false);
-  const [selectedStockItem, setSelectedStockItem] = useState<{code: string, name: string} | null>(null);
+  const [selectedStockItem, setSelectedStockItem] = useState<{code: string, name: string, currentStock: number, maxStock?: number | null, uom: string} | null>(null);
   const [stockQty, setStockQty] = useState('');
   const [stockSupplier, setStockSupplier] = useState('');
   const [stockLoading, setStockLoading] = useState(false);
@@ -69,7 +69,7 @@ export const MasterList: React.FC = () => {
     if (field === 'openingStock' || field === 'currentStock') {
       value = e.target.value === '' ? 0 : Number(e.target.value);
     } else if (field === 'minStock' || field === 'maxStock') {
-      value = e.target.value === '' ? undefined : Number(e.target.value);
+      value = e.target.value === '' ? null : Number(e.target.value);
     }
     setEditForm(prev => ({ ...prev, [field]: value }));
   };
@@ -79,7 +79,7 @@ export const MasterList: React.FC = () => {
     if (field === 'openingStock' || field === 'currentStock') {
       value = e.target.value === '' ? 0 : Number(e.target.value);
     } else if (field === 'minStock' || field === 'maxStock') {
-      value = e.target.value === '' ? undefined : Number(e.target.value);
+      value = e.target.value === '' ? null : Number(e.target.value);
     }
     
     setNewItem(prev => ({
@@ -113,13 +113,13 @@ export const MasterList: React.FC = () => {
       uom: UNITS[0],
       openingStock: 0,
       currentStock: 0,
-      minStock: undefined,
-      maxStock: undefined
+      minStock: null,
+      maxStock: null
     });
   };
 
   const openStockModal = (item: Item) => {
-    setSelectedStockItem({ code: item.code, name: item.name });
+    setSelectedStockItem({ code: item.code, name: item.name, currentStock: item.currentStock, maxStock: item.maxStock, uom: item.uom });
     setStockQty('');
     setStockSupplier('');
     setShowStockModal(true);
@@ -177,8 +177,8 @@ export const MasterList: React.FC = () => {
             uom: normalizedRow['uom'] || normalizedRow['unit'] || 'pcs',
             openingStock: Number(normalizedRow['opening stock'] || normalizedRow['opening'] || 0),
             currentStock: Number(normalizedRow['current stock'] || normalizedRow['stock'] || normalizedRow['quantity'] || normalizedRow['opening stock'] || 0),
-            minStock: normalizedRow['min stock'] !== undefined ? Number(normalizedRow['min stock']) : undefined,
-            maxStock: normalizedRow['max stock'] !== undefined ? Number(normalizedRow['max stock']) : undefined
+            minStock: normalizedRow['min stock'] !== undefined && normalizedRow['min stock'] !== '' ? Number(normalizedRow['min stock']) : null,
+            maxStock: normalizedRow['max stock'] !== undefined && normalizedRow['max stock'] !== '' ? Number(normalizedRow['max stock']) : null
           };
         }).filter(i => i.code && i.name); // Valid items only
 
@@ -372,7 +372,7 @@ export const MasterList: React.FC = () => {
                         onChange={(e) => handleChange(e, 'minStock')}
                       />
                     ) : (
-                      item.minStock !== undefined ? item.minStock : '-'
+                      item.minStock !== undefined && item.minStock !== null ? item.minStock : '-'
                     )}
                   </td>
 
@@ -386,15 +386,15 @@ export const MasterList: React.FC = () => {
                         onChange={(e) => handleChange(e, 'maxStock')}
                       />
                     ) : (
-                      item.maxStock !== undefined ? item.maxStock : '-'
+                      item.maxStock !== undefined && item.maxStock !== null ? item.maxStock : '-'
                     )}
                   </td>
 
                   {/* Stock (Read Only) */}
                   <td className={`p-4 text-right font-bold ${
-                    (item.minStock !== undefined && item.currentStock < item.minStock) || item.currentStock < 10 
+                    (item.minStock !== undefined && item.minStock !== null && item.currentStock < item.minStock) || item.currentStock < 10 
                       ? 'text-red-500' 
-                      : (item.maxStock !== undefined && item.currentStock > item.maxStock)
+                      : (item.maxStock !== undefined && item.maxStock !== null && item.currentStock > item.maxStock)
                         ? 'text-orange-500'
                         : 'text-gray-800'
                   }`}>
@@ -562,6 +562,11 @@ export const MasterList: React.FC = () => {
             </div>
             
             <form onSubmit={submitAddStock} className="p-6 space-y-4">
+              {selectedStockItem.maxStock !== undefined && selectedStockItem.maxStock !== null && stockQty && (selectedStockItem.currentStock + Number(stockQty)) > selectedStockItem.maxStock && (
+                <div className="bg-yellow-50 text-yellow-700 p-3 rounded-lg flex items-center text-sm animate-fade-in border border-yellow-100 mb-4">
+                  <AlertCircle size={16} className="mr-2 flex-shrink-0" /> Warning: Adding {stockQty} will bring stock above maximum level ({selectedStockItem.maxStock} {selectedStockItem.uom}).
+                </div>
+              )}
               <div className="bg-emerald-50 p-3 rounded-lg border border-emerald-100 text-sm">
                 <span className="text-emerald-800 font-semibold">{selectedStockItem.name}</span>
                 <div className="text-emerald-600 text-xs">Code: {selectedStockItem.code}</div>

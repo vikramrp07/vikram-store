@@ -12,7 +12,7 @@ export const Dashboard: React.FC = () => {
   const [isEditingThreshold, setIsEditingThreshold] = useState(false);
 
   const totalStock = items.reduce((acc, item) => acc + item.currentStock, 0);
-  const lowStockCount = items.filter(item => item.currentStock < (item.minStock !== undefined ? item.minStock : lowStockThreshold)).length;
+  const lowStockCount = items.filter(item => item.currentStock < (item.minStock != null ? item.minStock : lowStockThreshold)).length;
   
   // Data for chart (Top 5 items by stock)
   const chartData = [...items]

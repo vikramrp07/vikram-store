@@ -19,12 +19,28 @@ export const InwardForm: React.FC = () => {
   const [qty, setQty] = useState('');
   const [supplier, setSupplier] = useState('');
   const [uom, setUom] = useState(UNITS[0]);
+  const [minStock, setMinStock] = useState('');
+  const [maxStock, setMaxStock] = useState('');
   const [isNewItem, setIsNewItem] = useState(false);
   const [existingStock, setExistingStock] = useState<number | null>(null);
   const [transactionDate, setTransactionDate] = useState(new Date().toISOString().split('T')[0]);
+  const [warning, setWarning] = useState<string | null>(null);
 
   // Search State
   const [searchTerm, setSearchTerm] = useState('');
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Filter items based on search term
   const filteredItems = items.filter(i => 
@@ -53,6 +69,9 @@ export const InwardForm: React.FC = () => {
     setSearchTerm('');
     setQty('');
     setSupplier('');
+    setMinStock('');
+    setMaxStock('');
+    setWarning(null);
   };
 
   // Bulk Import State
@@ -69,14 +88,23 @@ export const InwardForm: React.FC = () => {
       setCategory(foundItem.category);
       setUom(foundItem.uom);
       setExistingStock(foundItem.currentStock);
+      setMinStock(foundItem.minStock !== undefined ? String(foundItem.minStock) : '');
+      setMaxStock(foundItem.maxStock !== undefined ? String(foundItem.maxStock) : '');
       setIsNewItem(false);
+      
+      if (qty && foundItem.maxStock != null && (foundItem.currentStock + Number(qty)) > foundItem.maxStock) {
+        setWarning(`Warning: Adding ${qty} will bring stock above maximum level (${foundItem.maxStock} ${foundItem.uom}).`);
+      } else {
+        setWarning(null);
+      }
     } else {
       if (itemCode.length > 2) {
         setIsNewItem(true);
         setExistingStock(null);
       }
+      setWarning(null);
     }
-  }, [itemCode, items]);
+  }, [itemCode, items, qty]);
 
   // Handle Single Entry Submit
   const handleSubmit = async (e: React.FormEvent) => {
@@ -88,13 +116,21 @@ export const InwardForm: React.FC = () => {
         quantity: Number(qty),
         supplier,
         date: transactionDate,
-        newItemDetails: isNewItem ? { name: itemName, category, uom } : undefined
+        newItemDetails: isNewItem ? { 
+          name: itemName, 
+          category, 
+          uom,
+          minStock: minStock ? Number(minStock) : undefined,
+          maxStock: maxStock ? Number(maxStock) : undefined
+        } : undefined
       });
       setSuccess(true);
       setItemCode('');
       setItemName('');
       setQty('');
       setSupplier('');
+      setMinStock('');
+      setMaxStock('');
       setTransactionDate(new Date().toISOString().split('T')[0]);
       setTimeout(() => setSuccess(false), 3000);
     } catch (err) {
@@ -107,8 +143,8 @@ export const InwardForm: React.FC = () => {
   // Handle Template Download
   const downloadTemplate = () => {
     const ws = XLSX.utils.json_to_sheet([
-      { 'Item Code': 'IT001', 'Quantity': 10, 'Supplier': 'Vendor A', 'Date (YYYY-MM-DD)': '2023-10-27', 'Item Name': '', 'Category': '', 'UoM': '' },
-      { 'Item Code': 'NEW001', 'Quantity': 50, 'Supplier': 'Vendor B', 'Date (YYYY-MM-DD)': '', 'Item Name': 'New Widget', 'Category': 'Electronics', 'UoM': 'pcs' }
+      { 'Item Code': 'IT001', 'Quantity': 10, 'Supplier': 'Vendor A', 'Date (YYYY-MM-DD)': '2023-10-27', 'Item Name': '', 'Category': '', 'UoM': '', 'Min Stock': '', 'Max Stock': '' },
+      { 'Item Code': 'NEW001', 'Quantity': 50, 'Supplier': 'Vendor B', 'Date (YYYY-MM-DD)': '', 'Item Name': 'New Widget', 'Category': 'Electronics', 'UoM': 'pcs', 'Min Stock': 10, 'Max Stock': 100 }
     ]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Inward_Template");
@@ -165,7 +201,9 @@ export const InwardForm: React.FC = () => {
              newItemDetails: {
                name: r['item name'] || r['name'] || r['item name (optional)'] ? String(r['item name'] || r['name'] || r['item name (optional)']).trim() : undefined,
                category: r['category'] || r['category (optional)'] ? String(r['category'] || r['category (optional)']).trim() : undefined,
-               uom: r['uom'] || r['unit'] || r['uom (optional)'] ? String(r['uom'] || r['unit'] || r['uom (optional)']).trim() : undefined
+               uom: r['uom'] || r['unit'] || r['uom (optional)'] ? String(r['uom'] || r['unit'] || r['uom (optional)']).trim() : undefined,
+               minStock: r['min stock'] !== undefined && r['min stock'] !== '' ? Number(r['min stock']) : undefined,
+               maxStock: r['max stock'] !== undefined && r['max stock'] !== '' ? Number(r['max stock']) : undefined
              }
            };
         });
@@ -232,65 +270,71 @@ export const InwardForm: React.FC = () => {
 
         {activeTab === 'single' ? (
           <form onSubmit={handleSubmit} className="p-6 space-y-4">
+            {warning && (
+              <div className="bg-yellow-50 text-yellow-700 p-3 rounded-lg flex items-center text-sm animate-fade-in border border-yellow-100 mb-4">
+                <AlertCircle size={16} className="mr-2 flex-shrink-0" /> {warning}
+              </div>
+            )}
             <div className="space-y-4">
               <label className="block text-sm font-medium text-gray-700">Search & Select Item</label>
               
               {!itemCode ? (
-                <div className="space-y-3">
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Search className="text-gray-400" size={18} />
-                    </div>
-                    <input
-                      type="text"
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      placeholder="Search existing item or type new code..."
-                      className="w-full pl-10 pr-4 p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                    />
+                <div className="relative" ref={dropdownRef}>
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Search className="text-gray-400" size={18} />
                   </div>
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => {
+                      setSearchTerm(e.target.value);
+                      setIsDropdownOpen(true);
+                    }}
+                    onFocus={() => setIsDropdownOpen(true)}
+                    placeholder="Search existing item or type new code..."
+                    className="w-full pl-10 pr-4 p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  />
                   
-                  <div className="border border-gray-200 rounded-lg max-h-60 overflow-y-auto bg-white">
-                    <table className="w-full text-left text-sm text-gray-600">
-                      <thead className="bg-gray-50 text-gray-800 sticky top-0 shadow-sm">
-                        <tr>
-                          <th className="p-3 font-medium">Item Code</th>
-                          <th className="p-3 font-medium">Name</th>
-                          <th className="p-3 text-right font-medium">Stock</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
+                  {isDropdownOpen && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                      <ul className="divide-y divide-gray-100">
                         {searchTerm.trim().length > 2 && !exactMatch && (
-                          <tr 
-                            onClick={handleAddNewItem}
-                            className="cursor-pointer bg-emerald-50 hover:bg-emerald-100 transition-colors"
+                          <li 
+                            onClick={() => {
+                              handleAddNewItem();
+                              setIsDropdownOpen(false);
+                            }}
+                            className="cursor-pointer bg-emerald-50 hover:bg-emerald-100 p-3 transition-colors flex items-center font-medium text-emerald-700"
                           >
-                            <td colSpan={3} className="p-3 font-medium text-emerald-700 flex items-center">
-                              <PlusCircle size={16} className="mr-2" />
-                              Add as new item: "{searchTerm.toUpperCase()}"
-                            </td>
-                          </tr>
+                            <PlusCircle size={16} className="mr-2" />
+                            Add as new item: "{searchTerm.toUpperCase()}"
+                          </li>
                         )}
                         {filteredItems.length === 0 && (!searchTerm || searchTerm.trim().length <= 2) ? (
-                          <tr><td colSpan={3} className="p-4 text-center text-gray-500">Search to find items or type a new code</td></tr>
+                          <li className="p-4 text-center text-gray-500">Search to find items or type a new code</li>
                         ) : (
                           filteredItems.map(item => (
-                            <tr 
+                            <li 
                               key={item.code} 
-                              onClick={() => handleSelectItem(item)}
-                              className="cursor-pointer hover:bg-emerald-50 transition-colors"
+                              onClick={() => {
+                                handleSelectItem(item);
+                                setIsDropdownOpen(false);
+                              }}
+                              className="cursor-pointer hover:bg-emerald-50 p-3 transition-colors flex justify-between items-center"
                             >
-                              <td className="p-3 font-medium text-gray-900">{item.code}</td>
-                              <td className="p-3">{item.name}</td>
-                              <td className="p-3 text-right font-semibold text-gray-700">
+                              <div>
+                                <div className="font-medium text-gray-900">{item.name}</div>
+                                <div className="text-xs text-gray-500">Code: {item.code}</div>
+                              </div>
+                              <div className="text-right font-semibold text-gray-700">
                                 {item.currentStock} {item.uom}
-                              </td>
-                            </tr>
+                              </div>
+                            </li>
                           ))
                         )}
-                      </tbody>
-                    </table>
-                  </div>
+                      </ul>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="flex justify-between items-center p-4 border border-emerald-200 bg-emerald-50 rounded-lg mb-4">
@@ -357,6 +401,33 @@ export const InwardForm: React.FC = () => {
                      </select>
                   </div>
                 </div>
+
+                {isNewItem && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Min Stock (Optional)</label>
+                      <input 
+                        type="number" 
+                        min="0"
+                        value={minStock}
+                        onChange={(e) => setMinStock(e.target.value)}
+                        className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                        placeholder="e.g. 10"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Max Stock (Optional)</label>
+                      <input 
+                        type="number" 
+                        min="0"
+                        value={maxStock}
+                        onChange={(e) => setMaxStock(e.target.value)}
+                        className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                        placeholder="e.g. 100"
+                      />
+                    </div>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t pt-4">
                   <div>
@@ -439,6 +510,8 @@ export const InwardForm: React.FC = () => {
                     <li><code className="bg-blue-100 px-1 rounded text-blue-800">Item Name</code>: Description (New items)</li>
                     <li><code className="bg-blue-100 px-1 rounded text-blue-800">Category</code>: Item group (New items)</li>
                     <li><code className="bg-blue-100 px-1 rounded text-blue-800">UoM</code>: Unit of Measure (New items)</li>
+                    <li><code className="bg-blue-100 px-1 rounded text-blue-800">Min Stock</code>: Minimum stock level (New items)</li>
+                    <li><code className="bg-blue-100 px-1 rounded text-blue-800">Max Stock</code>: Maximum stock level (New items)</li>
                   </ul>
                 </div>
               </div>

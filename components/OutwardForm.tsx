@@ -14,6 +14,7 @@ export const OutwardForm: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   
   // Form State
   const [itemCode, setItemCode] = useState('');
@@ -22,10 +23,24 @@ export const OutwardForm: React.FC = () => {
   const [customer, setCustomer] = useState('');
   const [transactionDate, setTransactionDate] = useState(new Date().toISOString().split('T')[0]);
   const [currentStock, setCurrentStock] = useState<number>(0);
+  const [minStock, setMinStock] = useState<number | undefined | null>(undefined);
   const [uom, setUom] = useState('');
 
   // Search State
   const [searchTerm, setSearchTerm] = useState('');
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Filter items based on search term
   const filteredItems = items.filter(i => 
@@ -45,32 +60,44 @@ export const OutwardForm: React.FC = () => {
     if (foundItem) {
       setItemName(foundItem.name);
       setCurrentStock(foundItem.currentStock);
+      setMinStock(foundItem.minStock);
       setUom(foundItem.uom);
       
       // Re-validate current quantity against new stock level
       if (qty && Number(qty) > foundItem.currentStock) {
         setError(`Insufficient stock. Only ${foundItem.currentStock} ${foundItem.uom} available.`);
+        setWarning(null);
       } else {
         setError(null);
+        if (qty && foundItem.minStock != null && (foundItem.currentStock - Number(qty)) < foundItem.minStock) {
+          setWarning(`Warning: Issuing ${qty} will bring stock below minimum level (${foundItem.minStock} ${foundItem.uom}).`);
+        } else {
+          setWarning(null);
+        }
       }
     } else {
       setItemName('');
       setCurrentStock(0);
+      setMinStock(undefined);
       setUom('');
       setError(null);
+      setWarning(null);
     }
-  }, [itemCode, items]);
+  }, [itemCode, items, qty]);
 
   const handleSelectItem = (item: Item) => {
     setItemCode(item.code);
     setSearchTerm('');
     setError(null);
+    setWarning(null);
   };
 
   const clearSelection = () => {
     setItemCode('');
     setSearchTerm('');
     setQty('');
+    setError(null);
+    setWarning(null);
   };
 
   const handleQtyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -80,9 +107,13 @@ export const OutwardForm: React.FC = () => {
     // Immediate validation
     if (itemCode && Number(val) > currentStock) {
        setError(`Cannot issue ${val}. Only ${currentStock} ${uom} available.`);
+       setWarning(null);
     } else {
-       if (error && error.includes("issue")) {
-          setError(null);
+       setError(null);
+       if (itemCode && minStock != null && (currentStock - Number(val)) < minStock) {
+          setWarning(`Warning: Issuing ${val} will bring stock below minimum level (${minStock} ${uom}).`);
+       } else {
+          setWarning(null);
        }
     }
   };
@@ -251,55 +282,60 @@ export const OutwardForm: React.FC = () => {
                 <AlertCircle size={16} className="mr-2 flex-shrink-0" /> {error}
               </div>
             )}
+            {warning && !error && (
+              <div className="bg-yellow-50 text-yellow-700 p-3 rounded-lg flex items-center text-sm animate-fade-in border border-yellow-100">
+                <AlertCircle size={16} className="mr-2 flex-shrink-0" /> {warning}
+              </div>
+            )}
 
             <div className="space-y-4">
               <label className="block text-sm font-medium text-gray-700">Search & Select Item</label>
               
               {!itemCode ? (
-                <div className="space-y-3">
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Search className="text-gray-400" size={18} />
-                    </div>
-                    <input
-                      type="text"
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      placeholder="Search item code or name..."
-                      className="w-full pl-10 pr-4 p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:outline-none"
-                    />
+                <div className="relative" ref={dropdownRef}>
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Search className="text-gray-400" size={18} />
                   </div>
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => {
+                      setSearchTerm(e.target.value);
+                      setIsDropdownOpen(true);
+                    }}
+                    onFocus={() => setIsDropdownOpen(true)}
+                    placeholder="Search item code or name..."
+                    className="w-full pl-10 pr-4 p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                  />
                   
-                  <div className="border border-gray-200 rounded-lg max-h-60 overflow-y-auto bg-white">
-                    <table className="w-full text-left text-sm text-gray-600">
-                      <thead className="bg-gray-50 text-gray-800 sticky top-0 shadow-sm">
-                        <tr>
-                          <th className="p-3 font-medium">Item Code</th>
-                          <th className="p-3 font-medium">Name</th>
-                          <th className="p-3 text-right font-medium">Stock</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
+                  {isDropdownOpen && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                      <ul className="divide-y divide-gray-100">
                         {filteredItems.length === 0 ? (
-                          <tr><td colSpan={3} className="p-4 text-center text-gray-500">No items found</td></tr>
+                          <li className="p-4 text-center text-gray-500">No items found</li>
                         ) : (
                           filteredItems.map(item => (
-                            <tr 
+                            <li 
                               key={item.code} 
-                              onClick={() => handleSelectItem(item)}
-                              className={`cursor-pointer hover:bg-orange-50 transition-colors ${item.currentStock === 0 ? 'opacity-60 bg-gray-50' : ''}`}
+                              onClick={() => {
+                                handleSelectItem(item);
+                                setIsDropdownOpen(false);
+                              }}
+                              className={`cursor-pointer hover:bg-orange-50 p-3 transition-colors flex justify-between items-center ${item.currentStock === 0 ? 'opacity-60 bg-gray-50' : ''}`}
                             >
-                              <td className="p-3 font-medium text-gray-900">{item.code}</td>
-                              <td className="p-3">{item.name}</td>
-                              <td className={`p-3 text-right font-semibold ${item.currentStock > 0 ? 'text-gray-700' : 'text-red-500'}`}>
+                              <div>
+                                <div className="font-medium text-gray-900">{item.name}</div>
+                                <div className="text-xs text-gray-500">Code: {item.code}</div>
+                              </div>
+                              <div className={`text-right font-semibold ${item.currentStock > 0 ? 'text-gray-700' : 'text-red-500'}`}>
                                 {item.currentStock} {item.uom}
-                              </td>
-                            </tr>
+                              </div>
+                            </li>
                           ))
                         )}
-                      </tbody>
-                    </table>
-                  </div>
+                      </ul>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="flex justify-between items-center p-4 border border-orange-200 bg-orange-50 rounded-lg">
