@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { useInventory } from '../context/InventoryContext';
-import { Search, Edit2, Save, X, UploadCloud, FileSpreadsheet, Plus, ArrowDownCircle, Loader2, AlertCircle } from 'lucide-react';
+import { Search, Edit2, Save, X, UploadCloud, FileSpreadsheet, Plus, ArrowDownCircle, Loader2, AlertCircle, Download } from 'lucide-react';
 import { Item, CATEGORIES, UNITS } from '../types';
 import * as XLSX from 'xlsx';
 
@@ -200,6 +200,32 @@ export const MasterList: React.FC = () => {
     reader.readAsArrayBuffer(file);
   };
 
+  const exportToExcel = () => {
+    if (items.length === 0) {
+      alert("No items to export!");
+      return;
+    }
+
+    const exportData = items.map(item => ({
+      'Item Code': item.code,
+      'Item Name': item.name,
+      'Category': item.category,
+      'UOM': item.uom,
+      'Opening Stock': item.openingStock,
+      'Current Stock': item.currentStock,
+      'Min Stock': item.minStock ?? '',
+      'Max Stock': item.maxStock ?? ''
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Master Inventory");
+    
+    // Generate filename with current date
+    const date = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(workbook, `Master_Inventory_${date}.xlsx`);
+  };
+
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden relative">
       <div className="p-4 border-b border-gray-100 flex flex-col md:flex-row justify-between items-center gap-4">
@@ -234,6 +260,16 @@ export const MasterList: React.FC = () => {
             <FileSpreadsheet size={16} />
             <span className="hidden sm:inline">Import Excel</span>
             <span className="sm:hidden">Import</span>
+          </button>
+
+          {/* Export Button */}
+          <button 
+            onClick={exportToExcel}
+            className="flex items-center space-x-2 bg-orange-600 hover:bg-orange-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
+            <Download size={16} />
+            <span className="hidden sm:inline">Export Excel</span>
+            <span className="sm:hidden">Export</span>
           </button>
 
           <div className="relative flex-1 md:flex-none md:w-64" ref={dropdownRef}>

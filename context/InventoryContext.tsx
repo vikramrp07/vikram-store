@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Item, LogEntry, TransactionType, InwardEntry, OutwardEntry } from '../types';
+import { Item, LogEntry, TransactionType, InwardEntry, OutwardEntry, BOM, BOMItem } from '../types';
 
 // =========================================================================================
 // 🚀 CONFIGURATION: PASTE YOUR GOOGLE WEB APP URL BELOW
@@ -20,6 +20,9 @@ interface InventoryContextType {
   processBulkInward: (entries: InwardEntry[]) => Promise<{ successCount: number; errorCount: number; errors: string[] }>;
   processOutward: (data: { itemCode: string; quantity: number; customer: string; date?: string }) => Promise<void>;
   processBulkOutward: (entries: OutwardEntry[]) => Promise<{ successCount: number; errorCount: number; errors: string[] }>;
+  boms: BOM[];
+  saveBOM: (fgCode: string, items: BOMItem[]) => Promise<void>;
+  bulkSaveBOM: (boms: BOM[]) => Promise<void>;
   exportData: () => void;
   exportDailyReport: (date: Date) => void;
   exportWeeklyReport: (date: Date) => void;
@@ -44,6 +47,7 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
 
   const [items, setItems] = useState<Item[]>(INITIAL_ITEMS);
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [boms, setBoms] = useState<BOM[]>([]);
   const [loading, setLoading] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
 
@@ -109,6 +113,12 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
       const logsJson = await fetchJson(`${apiUrl}?action=getLogs&_t=${ts}`);
       if (logsJson.status === 'success') {
          setLogs(logsJson.data);
+      }
+
+      // Fetch BOMs
+      const bomsJson = await fetchJson(`${apiUrl}?action=getBOMs&_t=${ts}`);
+      if (bomsJson.status === 'success') {
+         setBoms(bomsJson.data);
       }
 
     } catch (error: any) {
@@ -418,6 +428,38 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
     }
   };
 
+  const saveBOM = async (fgCode: string, items: BOMItem[]) => {
+    if (apiUrl) {
+      await postToApi({ action: 'saveBOM', fgCode, items });
+      await fetchData();
+    } else {
+      setBoms(prev => {
+        const existing = prev.find(b => b.fgCode === fgCode);
+        if (existing) {
+          return prev.map(b => b.fgCode === fgCode ? { fgCode, items } : b);
+        }
+        return [...prev, { fgCode, items }];
+      });
+    }
+  };
+
+  const bulkSaveBOM = async (newBoms: BOM[]) => {
+    if (apiUrl) {
+      await postToApi({ action: 'bulkSaveBOM', boms: newBoms });
+      await fetchData();
+    } else {
+      setBoms(prev => {
+        const updated = [...prev];
+        newBoms.forEach(nb => {
+          const idx = updated.findIndex(b => b.fgCode === nb.fgCode);
+          if (idx !== -1) updated[idx] = nb;
+          else updated.push(nb);
+        });
+        return updated;
+      });
+    }
+  };
+
   const exportData = () => {
     const headers = ["Date", "Type", "Item Code", "Name", "Quantity", "Party", "Stock After"];
     const rows = logs.map(log => [
@@ -568,6 +610,9 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
       processBulkInward, 
       processOutward, 
       processBulkOutward,
+      boms,
+      saveBOM,
+      bulkSaveBOM,
       exportData, 
       exportDailyReport,
       exportWeeklyReport,

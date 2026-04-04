@@ -23,6 +23,8 @@ function doGet(e) {
       return getItems();
     } else if (op === 'getLogs') {
       return getLogs();
+    } else if (op === 'getBOMs') {
+      return getBOMs();
     }
     
     return response({ status: 'error', message: 'Invalid action' });
@@ -52,6 +54,10 @@ function doPost(e) {
       return handleAddItem(data);
     } else if (action === 'updateItem') {
       return handleUpdateItem(data);
+    } else if (action === 'saveBOM') {
+      return handleSaveBOM(data);
+    } else if (action === 'bulkSaveBOM') {
+      return handleBulkSaveBOM(data);
     }
     return response({ status: 'error', message: 'Unknown action' });
   } catch (err) {
@@ -364,6 +370,89 @@ function handleUpdateItem(data) {
   return response({ status: 'error', message: 'Item not found' });
 }
 
+function getBOMs() {
+  const sheet = getSheet('BOM');
+  if (!sheet) return response({ status: 'success', data: [] });
+  
+  const rows = sheet.getDataRange().getValues();
+  if (rows.length < 2) return response({ status: 'success', data: [] });
+  
+  rows.shift(); // Remove header
+  
+  // Group by FG Code
+  const boms = {};
+  rows.forEach(r => {
+    const fgCode = r[0];
+    const rmCode = r[1];
+    const qty = Number(r[2]);
+    
+    if (!boms[fgCode]) {
+      boms[fgCode] = { fgCode, items: [] };
+    }
+    boms[fgCode].items.push({ itemCode: rmCode, quantity: qty });
+  });
+  
+  return response({ status: 'success', data: Object.values(boms) });
+}
+
+function handleSaveBOM(data) {
+  const ss = getSS();
+  let sheet = ss.getSheetByName('BOM');
+  if (!sheet) {
+    sheet = ss.insertSheet('BOM');
+    sheet.appendRow(['FG Code', 'RM Code', 'Quantity']);
+  }
+  
+  const fgCode = data.fgCode;
+  const items = data.items; // Array of {itemCode, quantity}
+  
+  // Remove existing BOM for this FG
+  const rows = sheet.getDataRange().getValues();
+  for (let i = rows.length - 1; i >= 1; i--) {
+    if (rows[i][0] === fgCode) {
+      sheet.deleteRow(i + 1);
+    }
+  }
+  
+  // Append new rows
+  items.forEach(item => {
+    sheet.appendRow([fgCode, item.itemCode, item.quantity]);
+  });
+  
+  return response({ status: 'success' });
+}
+
+function handleBulkSaveBOM(data) {
+  const ss = getSS();
+  let sheet = ss.getSheetByName('BOM');
+  if (!sheet) {
+    sheet = ss.insertSheet('BOM');
+    sheet.appendRow(['FG Code', 'RM Code', 'Quantity']);
+  }
+  
+  const boms = data.boms; // Array of {fgCode, items: [{itemCode, quantity}]}
+  const rows = sheet.getDataRange().getValues();
+  
+  // Collect all FG codes to be updated
+  const fgCodesToUpdate = boms.map(b => b.fgCode);
+  
+  // Remove existing BOMs for these FGs
+  for (let i = rows.length - 1; i >= 1; i--) {
+    if (fgCodesToUpdate.indexOf(rows[i][0]) !== -1) {
+      sheet.deleteRow(i + 1);
+    }
+  }
+  
+  // Append all new rows
+  boms.forEach(bom => {
+    bom.items.forEach(item => {
+      sheet.appendRow([bom.fgCode, item.itemCode, item.quantity]);
+    });
+  });
+  
+  return response({ status: 'success' });
+}
+
 // --- Helpers ---
 
 function getSS() {
@@ -390,5 +479,10 @@ function setup() {
   if (!ss.getSheetByName('Logs')) {
     const s = ss.insertSheet('Logs');
     s.appendRow(['Date', 'Type', 'Item Code', 'Name', 'Quantity', 'Party', 'Stock After']);
+  }
+
+  if (!ss.getSheetByName('BOM')) {
+    const s = ss.insertSheet('BOM');
+    s.appendRow(['FG Code', 'RM Code', 'Quantity']);
   }
 }

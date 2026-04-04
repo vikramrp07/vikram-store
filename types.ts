@@ -53,6 +53,16 @@ export interface OutwardEntry {
   date?: string; // Optional manual date
 }
 
+export interface BOMItem {
+  itemCode: string;
+  quantity: number; // Quantity required for 1 unit of FG
+}
+
+export interface BOM {
+  fgCode: string;
+  items: BOMItem[];
+}
+
 export const CATEGORIES = [
   'Electronics',
   'Furniture',
