@@ -1,8 +1,9 @@
 import React, { useState, useRef } from 'react';
 import { useInventory } from '../context/InventoryContext';
-import { Search, Edit2, Save, X, UploadCloud, FileSpreadsheet, Plus, ArrowDownCircle, Loader2, AlertCircle, Download } from 'lucide-react';
+import { Search, Edit2, Save, X, UploadCloud, FileSpreadsheet, Plus, ArrowDownCircle, Loader2, AlertCircle, Download, Barcode, Printer } from 'lucide-react';
 import { Item, CATEGORIES, UNITS } from '../types';
 import * as XLSX from 'xlsx';
+import BarcodeDisplay from 'react-barcode';
 
 export const MasterList: React.FC = () => {
   const { items, updateItem, importItems, addItem, processInward } = useInventory();
@@ -43,6 +44,11 @@ export const MasterList: React.FC = () => {
   const [stockQty, setStockQty] = useState('');
   const [stockSupplier, setStockSupplier] = useState('');
   const [stockLoading, setStockLoading] = useState(false);
+
+  // Barcode Modal State
+  const [showBarcodeModal, setShowBarcodeModal] = useState(false);
+  const [selectedBarcodeItem, setSelectedBarcodeItem] = useState<Item | null>(null);
+  const [showPrintModal, setShowPrintModal] = useState(false);
 
   const filteredItems = items.filter(i => 
     i.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -114,7 +120,8 @@ export const MasterList: React.FC = () => {
       openingStock: 0,
       currentStock: 0,
       minStock: null,
-      maxStock: null
+      maxStock: null,
+      location: ''
     });
   };
 
@@ -178,7 +185,8 @@ export const MasterList: React.FC = () => {
             openingStock: Number(normalizedRow['opening stock'] || normalizedRow['opening'] || 0),
             currentStock: Number(normalizedRow['current stock'] || normalizedRow['stock'] || normalizedRow['quantity'] || normalizedRow['opening stock'] || 0),
             minStock: normalizedRow['min stock'] !== undefined && normalizedRow['min stock'] !== '' ? Number(normalizedRow['min stock']) : null,
-            maxStock: normalizedRow['max stock'] !== undefined && normalizedRow['max stock'] !== '' ? Number(normalizedRow['max stock']) : null
+            maxStock: normalizedRow['max stock'] !== undefined && normalizedRow['max stock'] !== '' ? Number(normalizedRow['max stock']) : null,
+            location: normalizedRow['location'] || ''
           };
         }).filter(i => i.code && i.name); // Valid items only
 
@@ -214,7 +222,8 @@ export const MasterList: React.FC = () => {
       'Opening Stock': item.openingStock,
       'Current Stock': item.currentStock,
       'Min Stock': item.minStock ?? '',
-      'Max Stock': item.maxStock ?? ''
+      'Max Stock': item.maxStock ?? '',
+      'Location': item.location ?? ''
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(exportData);
@@ -270,6 +279,16 @@ export const MasterList: React.FC = () => {
             <Download size={16} />
             <span className="hidden sm:inline">Export Excel</span>
             <span className="sm:hidden">Export</span>
+          </button>
+
+          {/* Print Barcodes Button */}
+          <button 
+            onClick={() => setShowPrintModal(true)}
+            className="flex items-center space-x-2 bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
+            <Printer size={16} />
+            <span className="hidden lg:inline">Print Barcodes</span>
+            <span className="lg:hidden">Print</span>
           </button>
 
           <div className="relative flex-1 md:flex-none md:w-64" ref={dropdownRef}>
@@ -329,6 +348,7 @@ export const MasterList: React.FC = () => {
               <th className="p-4">Item Name</th>
               <th className="p-4">Category</th>
               <th className="p-4">UoM</th>
+              <th className="p-4">Location</th>
               <th className="p-4 text-right">Min</th>
               <th className="p-4 text-right">Max</th>
               <th className="p-4 text-right">Stock</th>
@@ -395,6 +415,36 @@ export const MasterList: React.FC = () => {
                       </select>
                     ) : (
                       item.uom
+                    )}
+                  </td>
+
+                  {/* Location */}
+                  <td className="p-4">
+                    {editingId === item.code ? (
+                      <input 
+                        className="border p-1.5 rounded w-full focus:ring-2 focus:ring-blue-500 focus:outline-none" 
+                        value={editForm.location || ''} 
+                        onChange={(e) => handleChange(e, 'location')}
+                        placeholder="e.g. A1"
+                      />
+                    ) : (
+                      item.location ? (
+                        <div className="flex items-center space-x-2">
+                          <span className="text-gray-700">{item.location}</span>
+                          <button 
+                            onClick={() => {
+                              setSelectedBarcodeItem(item);
+                              setShowBarcodeModal(true);
+                            }}
+                            className="text-gray-400 hover:text-blue-600 transition-colors"
+                            title="View Barcode"
+                          >
+                            <Barcode size={16} />
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-gray-400 text-xs italic">Not set</span>
+                      )
                     )}
                   </td>
 
@@ -563,6 +613,17 @@ export const MasterList: React.FC = () => {
                 </div>
               </div>
 
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Location (Optional)</label>
+                <input 
+                  type="text" 
+                  value={newItem.location ?? ''}
+                  onChange={(e) => handleAddNewChange(e, 'location')}
+                  className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  placeholder="e.g. Rack 3, A1-B2"
+                />
+              </div>
+
               <div className="pt-2 flex space-x-3">
                 <button 
                   type="button" 
@@ -651,6 +712,89 @@ export const MasterList: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Barcode Modal */}
+      {showBarcodeModal && selectedBarcodeItem && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden transform transition-all scale-100">
+            <div className="bg-gray-50 px-6 py-4 border-b border-gray-100 flex justify-between items-center">
+              <h3 className="font-semibold text-gray-800">Location Barcode</h3>
+              <button onClick={() => setShowBarcodeModal(false)} className="text-gray-400 hover:text-gray-600 transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-8 flex flex-col items-center justify-center space-y-4">
+              <div className="text-center">
+                <p className="font-bold text-lg text-gray-900">{selectedBarcodeItem.name}</p>
+                <p className="text-sm text-gray-500">Code: {selectedBarcodeItem.code}</p>
+              </div>
+              <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                <BarcodeDisplay 
+                  value={selectedBarcodeItem.location || ''} 
+                  width={2} 
+                  height={60} 
+                  displayValue={true}
+                  background="#ffffff"
+                  lineColor="#000000"
+                />
+              </div>
+              <p className="text-sm text-gray-500">Scan this barcode to identify location</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Print All Barcodes Modal */}
+      {showPrintModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 animate-fade-in no-print">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+            <div className="bg-gray-50 px-6 py-4 border-b border-gray-100 flex justify-between items-center">
+              <h3 className="font-semibold text-gray-800">Print Location Barcodes</h3>
+              <div className="flex space-x-3">
+                <button onClick={() => window.print()} className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center">
+                  <Printer size={16} className="mr-2" /> Print / Save PDF
+                </button>
+                <button onClick={() => setShowPrintModal(false)} className="text-gray-400 hover:text-gray-600 transition-colors p-2">
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+            <div className="p-6 overflow-y-auto flex-1 bg-gray-100">
+              <div id="printable-barcode-area" className="bg-white p-8 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6">
+                <style>{`
+                  @media print {
+                    body * { visibility: hidden; }
+                    #printable-barcode-area, #printable-barcode-area * { visibility: visible; }
+                    #printable-barcode-area { position: absolute; left: 0; top: 0; width: 100%; padding: 20px; gap: 20px; background: white; }
+                    .no-print { display: none !important; }
+                    @page { margin: 1cm; }
+                  }
+                `}</style>
+                {items.filter(i => i.location).length === 0 ? (
+                  <div className="col-span-full text-center text-gray-500 py-8">No items with locations found. Add locations to items first.</div>
+                ) : (
+                  items.filter(i => i.location).map(item => (
+                    <div key={item.code} className="border border-gray-300 rounded-lg p-4 flex flex-col items-center justify-center text-center break-inside-avoid bg-white">
+                      <p className="font-bold text-sm text-gray-900 mb-1 line-clamp-1">{item.name}</p>
+                      <p className="text-xs text-gray-500 mb-2">Item: {item.code}</p>
+                      <BarcodeDisplay 
+                        value={item.location || ''} 
+                        width={1.5} 
+                        height={40} 
+                        displayValue={true}
+                        background="#ffffff"
+                        lineColor="#000000"
+                        fontSize={12}
+                        margin={0}
+                      />
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}

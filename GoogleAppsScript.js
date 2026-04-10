@@ -84,7 +84,8 @@ function getItems() {
     openingStock: Number(r[4]),
     currentStock: Number(r[5]),
     minStock: r[6] !== "" && r[6] != null ? Number(r[6]) : null,
-    maxStock: r[7] !== "" && r[7] != null ? Number(r[7]) : null
+    maxStock: r[7] !== "" && r[7] != null ? Number(r[7]) : null,
+    location: r[8] !== undefined ? r[8] : ""
   })).filter(i => i.code && i.code !== "");
   
   return response({ status: 'success', data: items });
@@ -143,7 +144,8 @@ function handleInward(data) {
          0, 
          data.quantity,
          data.newItemDetails.minStock != null ? data.newItemDetails.minStock : "",
-         data.newItemDetails.maxStock != null ? data.newItemDetails.maxStock : ""
+         data.newItemDetails.maxStock != null ? data.newItemDetails.maxStock : "",
+         data.newItemDetails.location || ""
        ]);
        currentStock = 0; // Opening
     } else {
@@ -214,7 +216,8 @@ function handleBulkInward(data) {
           0,
           entry.quantity,
           entry.newItemDetails.minStock != null ? entry.newItemDetails.minStock : "",
-          entry.newItemDetails.maxStock != null ? entry.newItemDetails.maxStock : ""
+          entry.newItemDetails.maxStock != null ? entry.newItemDetails.maxStock : "",
+          entry.newItemDetails.location || ""
         ]);
         finalStock = entry.quantity;
         itemName = entry.newItemDetails.name;
@@ -343,7 +346,8 @@ function handleAddItem(data) {
     data.item.openingStock,
     data.item.currentStock,
     data.item.minStock != null ? data.item.minStock : "",
-    data.item.maxStock != null ? data.item.maxStock : ""
+    data.item.maxStock != null ? data.item.maxStock : "",
+    data.item.location || ""
   ]);
   return response({ status: 'success' });
 }
@@ -364,6 +368,7 @@ function handleUpdateItem(data) {
       }
       if (data.updates.minStock !== undefined) sheet.getRange(row, 7).setValue(data.updates.minStock === null ? "" : data.updates.minStock);
       if (data.updates.maxStock !== undefined) sheet.getRange(row, 8).setValue(data.updates.maxStock === null ? "" : data.updates.maxStock);
+      if (data.updates.location !== undefined) sheet.getRange(row, 9).setValue(data.updates.location);
       return response({ status: 'success' });
     }
   }
@@ -473,7 +478,7 @@ function setup() {
   
   if (!ss.getSheetByName('Master')) {
     const s = ss.insertSheet('Master');
-    s.appendRow(['Item Code', 'Name', 'Category', 'UoM', 'Opening Stock', 'Current Stock', 'Min Stock', 'Max Stock']);
+    s.appendRow(['Item Code', 'Name', 'Category', 'UoM', 'Opening Stock', 'Current Stock', 'Min Stock', 'Max Stock', 'Location']);
   }
   
   if (!ss.getSheetByName('Logs')) {

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useInventory } from '../context/InventoryContext';
-import { ArrowDownLeft, ArrowUpRight, Search, History } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, Search, History, Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 export const StockHistory: React.FC = () => {
   const { items, logs } = useInventory();
@@ -14,6 +15,26 @@ export const StockHistory: React.FC = () => {
 
   const selectedItemLogs = logs.filter(log => log.itemCode === selectedItemCode);
   const selectedItem = items.find(item => item.code === selectedItemCode);
+
+  const exportHistory = () => {
+    if (!selectedItem || selectedItemLogs.length === 0) return;
+
+    const exportData = selectedItemLogs.map(log => ({
+      'Date': new Date(log.date).toLocaleString(),
+      'Type': log.type,
+      'Item Code': log.itemCode,
+      'Item Name': log.itemName,
+      'Party/Reason': log.partyName,
+      'Quantity': log.type === 'INWARD' ? log.quantity : -log.quantity,
+      'Balance': log.stockAfter
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Stock History");
+    
+    XLSX.writeFile(workbook, `Stock_History_${selectedItem.code}_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -58,9 +79,19 @@ export const StockHistory: React.FC = () => {
               <h4 className="text-lg font-bold text-gray-800">{selectedItem?.name}</h4>
               <p className="text-sm text-gray-500">Code: {selectedItem?.code} | Category: {selectedItem?.category}</p>
             </div>
-            <div className="text-right">
-              <p className="text-sm text-gray-500">Current Stock</p>
-              <p className="text-2xl font-bold text-blue-600">{selectedItem?.currentStock} <span className="text-sm font-normal text-gray-500">{selectedItem?.uom}</span></p>
+            <div className="text-right flex items-center space-x-4">
+              <div>
+                <p className="text-sm text-gray-500">Current Stock</p>
+                <p className="text-2xl font-bold text-blue-600">{selectedItem?.currentStock} <span className="text-sm font-normal text-gray-500">{selectedItem?.uom}</span></p>
+              </div>
+              <button 
+                onClick={exportHistory}
+                disabled={selectedItemLogs.length === 0}
+                className="flex items-center space-x-2 bg-blue-50 hover:bg-blue-100 text-blue-700 px-4 py-2 rounded-lg border border-blue-200 text-sm font-medium transition-colors shadow-sm disabled:opacity-50"
+              >
+                <Download size={16} />
+                <span className="hidden sm:inline">Export History</span>
+              </button>
             </div>
           </div>
 

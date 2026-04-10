@@ -7,6 +7,7 @@ export interface Item {
   uom: string; // Unit of Measure
   minStock?: number | null;
   maxStock?: number | null;
+  location?: string;
 }
 
 export enum TransactionType {
@@ -43,6 +44,7 @@ export interface InwardEntry {
     uom?: string;
     minStock?: number | null;
     maxStock?: number | null;
+    location?: string;
   };
 }
 
