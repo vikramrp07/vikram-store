@@ -749,9 +749,9 @@ export const MasterList: React.FC = () => {
 
       {/* Print All Barcodes Modal */}
       {showPrintModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 animate-fade-in no-print">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
-            <div className="bg-gray-50 px-6 py-4 border-b border-gray-100 flex justify-between items-center">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 animate-fade-in print:p-0 print:bg-transparent print:items-start">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden print:shadow-none print:max-h-none print:overflow-visible">
+            <div className="bg-gray-50 px-6 py-4 border-b border-gray-100 flex justify-between items-center no-print">
               <h3 className="font-semibold text-gray-800">Print Location Barcodes</h3>
               <div className="flex space-x-3">
                 <button onClick={() => window.print()} className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center">
@@ -766,11 +766,19 @@ export const MasterList: React.FC = () => {
               <div id="printable-barcode-area" className="bg-white p-8 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6">
                 <style>{`
                   @media print {
-                    body * { visibility: hidden; }
-                    #printable-barcode-area, #printable-barcode-area * { visibility: visible; }
-                    #printable-barcode-area { position: absolute; left: 0; top: 0; width: 100%; padding: 20px; gap: 20px; background: white; }
-                    .no-print { display: none !important; }
-                    @page { margin: 1cm; }
+                    body * { visibility: hidden !important; }
+                    #printable-barcode-area, #printable-barcode-area * { visibility: visible !important; }
+                    #printable-barcode-area { 
+                      position: absolute !important; 
+                      left: 0 !important; 
+                      top: 0 !important; 
+                      width: 100% !important; 
+                      padding: 0 !important; 
+                      margin: 0 !important;
+                      background: white !important;
+                    }
+                    .no-print, .no-print * { display: none !important; }
+                    @page { margin: 0.5in; }
                   }
                 `}</style>
                 {items.filter(i => i.location).length === 0 ? (
@@ -789,6 +797,7 @@ export const MasterList: React.FC = () => {
                         lineColor="#000000"
                         fontSize={12}
                         margin={0}
+                        renderer="svg"
                       />
                     </div>
                   ))
