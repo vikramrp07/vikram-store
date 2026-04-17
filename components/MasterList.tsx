@@ -332,16 +332,17 @@ export const MasterList: React.FC = () => {
           <span className="bg-gray-100 text-gray-500 text-xs px-2 py-1 rounded-full">{items.length} Items</span>
         </div>
         
-        <div className="flex items-center space-x-3 w-full md:w-auto">
+        <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
           {/* Add Item Button */}
           <button 
             onClick={() => setShowAddModal(true)}
-            className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-sm focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
           >
             <Plus size={16} />
-            <span className="hidden sm:inline">Add Item</span>
-            <span className="sm:hidden">Add</span>
+            <span>Add Item</span>
           </button>
+
+          <div className="hidden lg:block h-6 w-px bg-gray-200 mx-1"></div>
 
           {/* File Upload Trigger */}
           <input 
@@ -353,11 +354,11 @@ export const MasterList: React.FC = () => {
           />
           <button 
             onClick={() => fileInputRef.current?.click()}
-            className="flex items-center space-x-2 bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+            className="flex items-center gap-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 px-3 py-2 rounded-lg text-sm font-medium transition-all shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none group"
+            title="Import from Excel"
           >
-            <FileSpreadsheet size={16} />
-            <span className="hidden sm:inline">Import Excel</span>
-            <span className="sm:hidden">Import</span>
+            <FileSpreadsheet size={16} className="text-emerald-600 group-hover:scale-110 transition-transform" />
+            <span className="hidden xl:inline">Import</span>
           </button>
 
           {/* Bulk Adjust Trigger */}
@@ -370,34 +371,34 @@ export const MasterList: React.FC = () => {
           />
           <button 
             onClick={() => bulkAdjustInputRef.current?.click()}
-            className="flex items-center space-x-2 bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+            className="flex items-center gap-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 px-3 py-2 rounded-lg text-sm font-medium transition-all shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none group"
             title="Bulk Adjust Stock"
           >
-            <Sliders size={16} />
-            <span className="hidden lg:inline">Bulk Adjust</span>
+            <Sliders size={16} className="text-yellow-500 group-hover:scale-110 transition-transform" />
+            <span className="hidden xl:inline">Bulk Adjust</span>
           </button>
 
           {/* Export Button */}
           <button 
             onClick={exportToExcel}
-            className="flex items-center space-x-2 bg-orange-600 hover:bg-orange-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+            className="flex items-center gap-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 px-3 py-2 rounded-lg text-sm font-medium transition-all shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none group"
+            title="Export to Excel"
           >
-            <Download size={16} />
-            <span className="hidden sm:inline">Export Excel</span>
-            <span className="sm:hidden">Export</span>
+            <Download size={16} className="text-orange-500 group-hover:scale-110 transition-transform" />
+            <span className="hidden xl:inline">Export</span>
           </button>
 
           {/* Print Barcodes Button */}
           <button 
             onClick={() => setShowPrintModal(true)}
-            className="flex items-center space-x-2 bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+            className="flex items-center gap-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 px-3 py-2 rounded-lg text-sm font-medium transition-all shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none group"
+            title="Print Barcodes"
           >
-            <Printer size={16} />
-            <span className="hidden lg:inline">Print Barcodes</span>
-            <span className="lg:hidden">Print</span>
+            <Printer size={16} className="text-purple-600 group-hover:scale-110 transition-transform" />
+            <span className="hidden xl:inline">Print</span>
           </button>
 
-          <div className="relative flex-1 md:flex-none md:w-64" ref={dropdownRef}>
+          <div className="relative flex-1 min-w-[200px] md:flex-none md:w-64 mt-2 md:mt-0" ref={dropdownRef}>
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
             <input 
               type="text" 
@@ -596,32 +597,36 @@ export const MasterList: React.FC = () => {
                   {/* Actions */}
                   <td className="p-4 text-center">
                     {editingId === item.code ? (
-                      <div className="flex justify-center space-x-2">
-                        <button onClick={() => saveEdit(item.code)} className="text-green-600 hover:bg-green-100 p-2 rounded-lg transition-colors"><Save size={16} /></button>
-                        <button onClick={cancelEdit} className="text-red-600 hover:bg-red-100 p-2 rounded-lg transition-colors"><X size={16} /></button>
+                      <div className="flex justify-center items-center gap-2">
+                        <button onClick={() => saveEdit(item.code)} className="flex items-center text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 p-2 rounded-lg transition-colors shadow-sm" title="Save">
+                          <Save size={15} />
+                        </button>
+                        <button onClick={cancelEdit} className="flex items-center text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 p-2 rounded-lg transition-colors shadow-sm" title="Cancel">
+                          <X size={15} />
+                        </button>
                       </div>
                     ) : (
-                      <div className="flex justify-center items-center space-x-1">
+                      <div className="flex justify-center items-center gap-2">
                         <button 
                           onClick={() => startEdit(item)} 
-                          className="text-blue-600 hover:bg-blue-100 p-2 rounded-lg transition-colors"
+                          className="text-gray-500 bg-white border border-gray-200 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50 p-2 rounded-lg transition-all shadow-sm"
                           title="Edit Item Details"
                         >
-                          <Edit2 size={16} />
+                          <Edit2 size={15} />
                         </button>
                         <button 
                           onClick={() => openStockModal(item)} 
-                          className="text-emerald-600 hover:bg-emerald-100 p-2 rounded-lg transition-colors"
+                          className="text-gray-500 bg-white border border-gray-200 hover:border-emerald-300 hover:text-emerald-600 hover:bg-emerald-50 p-2 rounded-lg transition-all shadow-sm"
                           title="Add Stock (Inward)"
                         >
-                          <ArrowDownCircle size={16} />
+                          <ArrowDownCircle size={15} />
                         </button>
                         <button 
                           onClick={() => openAdjustModal(item)} 
-                          className="text-yellow-600 hover:bg-yellow-100 p-2 rounded-lg transition-colors"
+                          className="text-gray-500 bg-white border border-gray-200 hover:border-yellow-400 hover:text-yellow-600 hover:bg-yellow-50 p-2 rounded-lg transition-all shadow-sm"
                           title="Adjust Stock"
                         >
-                          <Sliders size={16} />
+                          <Sliders size={15} />
                         </button>
                       </div>
                     )}
