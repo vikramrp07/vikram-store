@@ -12,7 +12,8 @@ export interface Item {
 
 export enum TransactionType {
   INWARD = 'INWARD',
-  OUTWARD = 'OUTWARD'
+  OUTWARD = 'OUTWARD',
+  ADJUSTMENT = 'ADJUSTMENT'
 }
 
 export interface LogEntry {
@@ -52,6 +53,13 @@ export interface OutwardEntry {
   itemCode: string;
   quantity: number;
   customer: string;
+  date?: string; // Optional manual date
+}
+
+export interface AdjustmentEntry {
+  itemCode: string;
+  newQuantity: number;
+  reason: string;
   date?: string; // Optional manual date
 }
 

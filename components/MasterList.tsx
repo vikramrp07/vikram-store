@@ -1,18 +1,19 @@
 import React, { useState, useRef } from 'react';
 import { useInventory } from '../context/InventoryContext';
-import { Search, Edit2, Save, X, UploadCloud, FileSpreadsheet, Plus, ArrowDownCircle, Loader2, AlertCircle, Download, Barcode, Printer } from 'lucide-react';
-import { Item, CATEGORIES, UNITS } from '../types';
+import { Search, Edit2, Save, X, UploadCloud, FileSpreadsheet, Plus, ArrowDownCircle, Loader2, AlertCircle, Download, Barcode, Printer, Sliders } from 'lucide-react';
+import { Item, CATEGORIES, UNITS, AdjustmentEntry } from '../types';
 import * as XLSX from 'xlsx';
 import BarcodeDisplay from 'react-barcode';
 
 export const MasterList: React.FC = () => {
-  const { items, updateItem, importItems, addItem, processInward } = useInventory();
+  const { items, updateItem, importItems, addItem, processInward, adjustStock, processBulkAdjustStock } = useInventory();
   const [searchTerm, setSearchTerm] = useState('');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Item>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const bulkAdjustInputRef = useRef<HTMLInputElement>(null);
 
   // Handle outside click for dropdown
   React.useEffect(() => {
@@ -44,6 +45,13 @@ export const MasterList: React.FC = () => {
   const [stockQty, setStockQty] = useState('');
   const [stockSupplier, setStockSupplier] = useState('');
   const [stockLoading, setStockLoading] = useState(false);
+
+  // Adjust Stock Modal State
+  const [showAdjustModal, setShowAdjustModal] = useState(false);
+  const [selectedAdjustItem, setSelectedAdjustItem] = useState<{code: string, name: string, currentStock: number, uom: string} | null>(null);
+  const [adjustQty, setAdjustQty] = useState('');
+  const [adjustReason, setAdjustReason] = useState('');
+  const [adjustLoading, setAdjustLoading] = useState(false);
 
   // Barcode Modal State
   const [showBarcodeModal, setShowBarcodeModal] = useState(false);
@@ -132,6 +140,13 @@ export const MasterList: React.FC = () => {
     setShowStockModal(true);
   };
 
+  const openAdjustModal = (item: Item) => {
+    setSelectedAdjustItem({ code: item.code, name: item.name, currentStock: item.currentStock, uom: item.uom });
+    setAdjustQty(item.currentStock.toString());
+    setAdjustReason('');
+    setShowAdjustModal(true);
+  };
+
   const submitAddStock = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedStockItem || !stockQty || !stockSupplier) return;
@@ -148,6 +163,25 @@ export const MasterList: React.FC = () => {
       alert("Failed to add stock: " + error.message);
     } finally {
       setStockLoading(false);
+    }
+  };
+
+  const submitAdjustStock = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedAdjustItem || adjustQty === '' || !adjustReason) return;
+
+    setAdjustLoading(true);
+    try {
+      await adjustStock(
+        selectedAdjustItem.code,
+        Number(adjustQty),
+        adjustReason
+      );
+      setShowAdjustModal(false);
+    } catch (error: any) {
+      alert("Failed to adjust stock: " + error.message);
+    } finally {
+      setAdjustLoading(false);
     }
   };
 
@@ -203,6 +237,61 @@ export const MasterList: React.FC = () => {
       } finally {
         // Reset input
         if (fileInputRef.current) fileInputRef.current.value = "";
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const handleBulkAdjustUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const data = new Uint8Array(evt.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const wsname = workbook.SheetNames[0];
+        const ws = workbook.Sheets[wsname];
+        const jsonData = XLSX.utils.sheet_to_json(ws);
+
+        if (jsonData.length === 0) {
+          alert("Sheet is empty!");
+          return;
+        }
+
+        const entries: AdjustmentEntry[] = jsonData.map((row: any) => {
+          const normalizedRow: any = {};
+          Object.keys(row).forEach(key => {
+            normalizedRow[key.toLowerCase().trim()] = row[key];
+          });
+
+          return {
+            itemCode: normalizedRow['item code'] || normalizedRow['code'] || '',
+            newQuantity: Number(normalizedRow['new quantity'] || normalizedRow['quantity'] || normalizedRow['stock'] || 0),
+            reason: normalizedRow['reason'] || 'Bulk Adjustment',
+            date: new Date().toISOString()
+          };
+        }).filter(i => i.itemCode && i.newQuantity !== undefined && !isNaN(i.newQuantity));
+
+        if (entries.length > 0) {
+          if (confirm(`Are you sure you want to bulk adjust ${entries.length} items? This action cannot be easily undone.`)) {
+            const res = await processBulkAdjustStock(entries);
+            if (res.errorCount > 0) {
+              alert(`Bulk adjustment completed with ${res.successCount} successes and ${res.errorCount} errors.\n\nErrors:\n${res.errors.join('\n')}`);
+            } else {
+              alert(`Successfully adjusted ${res.successCount} items.`);
+            }
+          }
+        } else {
+           alert('No valid rows found. Ensure columns like "Item Code" and "New Quantity" exist.');
+        }
+
+      } catch (error) {
+        console.error("Bulk Adjust Error:", error);
+        alert("Failed to parse Excel file. Please check the format.");
+      } finally {
+        if (bulkAdjustInputRef.current) bulkAdjustInputRef.current.value = "";
       }
     };
     reader.readAsArrayBuffer(file);
@@ -269,6 +358,23 @@ export const MasterList: React.FC = () => {
             <FileSpreadsheet size={16} />
             <span className="hidden sm:inline">Import Excel</span>
             <span className="sm:hidden">Import</span>
+          </button>
+
+          {/* Bulk Adjust Trigger */}
+          <input 
+            type="file" 
+            ref={bulkAdjustInputRef} 
+            onChange={handleBulkAdjustUpload} 
+            accept=".xlsx, .xls, .csv" 
+            className="hidden" 
+          />
+          <button 
+            onClick={() => bulkAdjustInputRef.current?.click()}
+            className="flex items-center space-x-2 bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+            title="Bulk Adjust Stock"
+          >
+            <Sliders size={16} />
+            <span className="hidden lg:inline">Bulk Adjust</span>
           </button>
 
           {/* Export Button */}
@@ -510,6 +616,13 @@ export const MasterList: React.FC = () => {
                         >
                           <ArrowDownCircle size={16} />
                         </button>
+                        <button 
+                          onClick={() => openAdjustModal(item)} 
+                          className="text-yellow-600 hover:bg-yellow-100 p-2 rounded-lg transition-colors"
+                          title="Adjust Stock"
+                        >
+                          <Sliders size={16} />
+                        </button>
                       </div>
                     )}
                   </td>
@@ -708,6 +821,74 @@ export const MasterList: React.FC = () => {
                     </>
                   ) : (
                     'Confirm Inward'
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Adjust Stock Modal */}
+      {showAdjustModal && selectedAdjustItem && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden transform transition-all scale-100">
+            <div className="bg-yellow-500 px-6 py-4 flex justify-between items-center">
+              <h3 className="font-semibold text-white flex items-center">
+                <Sliders size={20} className="mr-2" /> 
+                Adjust Stock
+              </h3>
+              <button onClick={() => setShowAdjustModal(false)} className="text-yellow-100 hover:text-white transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+            
+            <form onSubmit={submitAdjustStock} className="p-6 space-y-4">
+              <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-100 text-sm">
+                <span className="text-yellow-800 font-semibold">{selectedAdjustItem.name}</span>
+                <div className="text-yellow-600 text-xs">Code: {selectedAdjustItem.code} | Current Stock: {selectedAdjustItem.currentStock} {selectedAdjustItem.uom}</div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">New Total Quantity</label>
+                <input 
+                  required
+                  type="number" 
+                  min="0"
+                  autoFocus
+                  value={adjustQty}
+                  onChange={(e) => setAdjustQty(e.target.value)}
+                  className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:outline-none"
+                  placeholder="0"
+                />
+                <p className="text-xs text-gray-500 mt-1">Set the exact stock level currently present.</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Reason for Adjustment</label>
+                <input 
+                  required
+                  type="text" 
+                  value={adjustReason}
+                  onChange={(e) => setAdjustReason(e.target.value)}
+                  className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:outline-none"
+                  placeholder="e.g. Stock Count, Damage, Correction"
+                />
+              </div>
+
+              <div className="pt-2">
+                <button 
+                  type="submit" 
+                  disabled={adjustLoading}
+                  className="w-full px-4 py-2.5 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 font-medium transition-colors shadow-sm disabled:opacity-70 flex justify-center items-center"
+                >
+                  {adjustLoading ? (
+                    <>
+                      <Loader2 size={18} className="animate-spin mr-2" />
+                      Adjusting...
+                    </>
+                  ) : (
+                    'Confirm Adjustment'
                   )}
                 </button>
               </div>

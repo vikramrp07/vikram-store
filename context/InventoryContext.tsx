@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Item, LogEntry, TransactionType, InwardEntry, OutwardEntry, BOM, BOMItem } from '../types';
+import { Item, LogEntry, TransactionType, InwardEntry, OutwardEntry, BOM, BOMItem, AdjustmentEntry } from '../types';
 
 // =========================================================================================
 // 🚀 CONFIGURATION: PASTE YOUR GOOGLE WEB APP URL BELOW
@@ -28,6 +28,7 @@ interface InventoryContextType {
   exportWeeklyReport: (date: Date) => void;
   exportMonthlyReport: (date: Date) => void;
   adjustStock: (code: string, newQty: number, reason: string) => Promise<void>;
+  processBulkAdjustStock: (entries: AdjustmentEntry[]) => Promise<{ successCount: number; errorCount: number; errors: string[] }>;
   setConnectionUrl: (url: string) => void;
 }
 
@@ -187,7 +188,7 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
      const diff = newQty - currentItem.currentStock;
      
      if (apiUrl) {
-       await postToApi({ action: 'updateItem', code, updates: { currentStock: newQty } });
+       await postToApi({ action: 'adjustStock', itemCode: code, newQuantity: newQty, reason });
        await fetchData();
      } else {
         updateItem(code, { currentStock: newQty });
@@ -196,13 +197,65 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
           date: new Date().toISOString(),
           itemCode: code,
           itemName: currentItem.name,
-          type: TransactionType.INWARD, 
+          type: TransactionType.ADJUSTMENT, 
           quantity: Math.abs(diff),
           partyName: `Adjustment: ${reason}`,
           stockAfter: newQty
         };
         setLogs(prev => [newLog, ...prev]);
      }
+  };
+
+  const processBulkAdjustStock = async (entries: AdjustmentEntry[]) => {
+    if (apiUrl) {
+      const result = await postToApi({ action: 'bulkAdjustStock', entries });
+      await fetchData();
+      return { 
+        successCount: result?.successCount || 0, 
+        errorCount: result?.errorCount || 0, 
+        errors: result?.errors || [] 
+      };
+    } else {
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      let successCount = 0;
+      let errorCount = 0;
+      const errors: string[] = [];
+      const newLogs: LogEntry[] = [];
+      
+      const currentItemsMap = new Map<string, Item>();
+      items.forEach(i => currentItemsMap.set(i.code, i));
+
+      entries.forEach((entry, index) => {
+        try {
+          if (!entry.itemCode || entry.newQuantity === undefined) throw new Error(`Row ${index + 1}: Missing fields`);
+          
+          const existingItem = currentItemsMap.get(entry.itemCode);
+          if (!existingItem) throw new Error(`Row ${index + 1}: Item not found`);
+
+          const diff = entry.newQuantity - existingItem.currentStock;
+          currentItemsMap.set(entry.itemCode, { ...existingItem, currentStock: entry.newQuantity });
+
+          newLogs.push({
+            id: Date.now().toString() + Math.random(),
+            date: entry.date ? new Date(entry.date).toISOString() : new Date().toISOString(),
+            itemCode: entry.itemCode,
+            itemName: existingItem.name,
+            type: TransactionType.ADJUSTMENT,
+            quantity: Math.abs(diff),
+            partyName: entry.reason || "Bulk Manual Adjustment",
+            stockAfter: entry.newQuantity
+          });
+          successCount++;
+        } catch (err: any) {
+          errorCount++;
+          errors.push(err.message);
+        }
+      });
+
+      setItems(Array.from(currentItemsMap.values()));
+      setLogs(prev => [...newLogs, ...prev]);
+      return { successCount, errorCount, errors };
+    }
   };
 
   const importItems = (newItems: Item[]) => {
@@ -618,6 +671,7 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
       exportWeeklyReport,
       exportMonthlyReport,
       adjustStock,
+      processBulkAdjustStock,
       setConnectionUrl 
     }}>
       {children}

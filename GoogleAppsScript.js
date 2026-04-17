@@ -50,6 +50,10 @@ function doPost(e) {
       return handleOutward(data);
     } else if (action === 'bulkOutward') {
       return handleBulkOutward(data);
+    } else if (action === 'adjustStock') {
+      return handleAdjustStock(data);
+    } else if (action === 'bulkAdjustStock') {
+      return handleBulkAdjustStock(data);
     } else if (action === 'addItem') {
       return handleAddItem(data);
     } else if (action === 'updateItem') {
@@ -328,6 +332,97 @@ function handleBulkOutward(data) {
         finalStock
       ]);
       success++;
+    } catch (e) {
+      errors.push(`Row ${idx+1}: ${e.message}`);
+    }
+  });
+  
+  return response({ status: 'success', successCount: success, errorCount: errors.length, errors: errors });
+}
+
+function handleAdjustStock(data) {
+  const ss = getSS();
+  const master = ss.getSheetByName('Master');
+  const logs = ss.getSheetByName('Logs');
+  
+  const rows = master.getDataRange().getValues();
+  let rowIndex = -1;
+  let itemName = "";
+  let oldStock = 0;
+  
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i][0] === data.itemCode) {
+      rowIndex = i + 1;
+      itemName = rows[i][1];
+      oldStock = Number(rows[i][5]);
+      break;
+    }
+  }
+  
+  if (rowIndex === -1) throw new Error("Item not found");
+  
+  const newStock = Number(data.newQuantity);
+  const diff = Math.abs(newStock - oldStock);
+  
+  master.getRange(rowIndex, 6).setValue(newStock);
+  
+  logs.appendRow([
+    data.date ? new Date(data.date).toISOString() : new Date().toISOString(),
+    'ADJUSTMENT',
+    data.itemCode,
+    itemName,
+    diff, // Record the absolute difference for the 'Quantity' column in logs
+    data.reason || "Manual Adjustment",
+    newStock
+  ]);
+  
+  return response({ status: 'success' });
+}
+
+function handleBulkAdjustStock(data) {
+  const ss = getSS();
+  const master = ss.getSheetByName('Master');
+  const logs = ss.getSheetByName('Logs');
+  const masterData = master.getDataRange().getValues();
+  
+  let success = 0;
+  let errors = [];
+  
+  // Map code to row index
+  let codeMap = {};
+  for(let i=1; i<masterData.length; i++) {
+    codeMap[masterData[i][0]] = i + 1;
+  }
+  
+  data.entries.forEach((entry, idx) => {
+    try {
+      if (!entry.itemCode || entry.newQuantity === undefined) {
+        throw new Error("Missing required fields (Item Code, New Quantity)");
+      }
+
+      let rowIndex = codeMap[entry.itemCode];
+      
+      if (rowIndex) {
+        let oldStock = Number(master.getRange(rowIndex, 6).getValue());
+        let newStock = Number(entry.newQuantity);
+        let diff = Math.abs(newStock - oldStock);
+        let itemName = master.getRange(rowIndex, 2).getValue();
+        
+        master.getRange(rowIndex, 6).setValue(newStock);
+        
+        logs.appendRow([
+          entry.date ? new Date(entry.date).toISOString() : new Date().toISOString(),
+          'ADJUSTMENT',
+          entry.itemCode,
+          itemName,
+          diff,
+          entry.reason || "Bulk Manual Adjustment",
+          newStock
+        ]);
+        success++;
+      } else {
+        throw new Error("Item not found");
+      }
     } catch (e) {
       errors.push(`Row ${idx+1}: ${e.message}`);
     }
