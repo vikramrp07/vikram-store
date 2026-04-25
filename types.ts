@@ -63,6 +63,12 @@ export interface AdjustmentEntry {
   date?: string; // Optional manual date
 }
 
+export interface MinMaxEntry {
+  itemCode: string;
+  minStock?: number | null;
+  maxStock?: number | null;
+}
+
 export interface BOMItem {
   itemCode: string;
   quantity: number; // Quantity required for 1 unit of FG

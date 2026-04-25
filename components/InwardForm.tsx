@@ -150,6 +150,24 @@ export const InwardForm: React.FC = () => {
     }
   }, [itemCode, items, qty]);
 
+  // Scroll highlighted item into view
+  useEffect(() => {
+    if (isDropdownOpen) {
+      const menu = document.getElementById('inward-dropdown-menu');
+      const item = document.getElementById(`inward-dropdown-item-${highlightedIndex}`);
+      if (menu && item) {
+        const menuRect = menu.getBoundingClientRect();
+        const itemRect = item.getBoundingClientRect();
+        
+        if (itemRect.bottom > menuRect.bottom) {
+          menu.scrollTop += (itemRect.bottom - menuRect.bottom);
+        } else if (itemRect.top < menuRect.top) {
+          menu.scrollTop -= (menuRect.top - itemRect.top);
+        }
+      }
+    }
+  }, [highlightedIndex, isDropdownOpen]);
+
   // Handle Single Entry Submit
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -346,7 +364,7 @@ export const InwardForm: React.FC = () => {
                   />
                   
                   {isDropdownOpen && (
-                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto" id="inward-dropdown-menu">
                       <ul className="divide-y divide-gray-100">
                         {dropdownOptions.length === 0 ? (
                           <li className="p-4 text-center text-gray-500">Search to find items or type a new code</li>
@@ -357,6 +375,7 @@ export const InwardForm: React.FC = () => {
                               return (
                                 <li 
                                   key="new"
+                                  id={`inward-dropdown-item-${index}`}
                                   onMouseEnter={() => setHighlightedIndex(index)}
                                   onClick={() => {
                                     handleAddNewItem();
@@ -373,6 +392,7 @@ export const InwardForm: React.FC = () => {
                               return (
                                 <li 
                                   key={item.code} 
+                                  id={`inward-dropdown-item-${index}`}
                                   onMouseEnter={() => setHighlightedIndex(index)}
                                   onClick={() => {
                                     handleSelectItem(item);

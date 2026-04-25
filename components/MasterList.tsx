@@ -1,12 +1,12 @@
 import React, { useState, useRef } from 'react';
 import { useInventory } from '../context/InventoryContext';
-import { Search, Edit2, Save, X, UploadCloud, FileSpreadsheet, Plus, ArrowDownCircle, Loader2, AlertCircle, Download, Barcode, Printer, Sliders } from 'lucide-react';
-import { Item, CATEGORIES, UNITS, AdjustmentEntry } from '../types';
+import { Search, Edit2, Save, X, UploadCloud, FileSpreadsheet, Plus, ArrowDownCircle, Loader2, AlertCircle, Download, Barcode, Printer, Sliders, ArrowUpDown } from 'lucide-react';
+import { Item, CATEGORIES, UNITS, AdjustmentEntry, MinMaxEntry } from '../types';
 import * as XLSX from 'xlsx';
 import BarcodeDisplay from 'react-barcode';
 
 export const MasterList: React.FC = () => {
-  const { items, updateItem, importItems, addItem, processInward, adjustStock, processBulkAdjustStock } = useInventory();
+  const { items, updateItem, importItems, addItem, processInward, adjustStock, processBulkAdjustStock, processBulkUpdateMinMax } = useInventory();
   const [searchTerm, setSearchTerm] = useState('');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -14,6 +14,7 @@ export const MasterList: React.FC = () => {
   const [editForm, setEditForm] = useState<Partial<Item>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bulkAdjustInputRef = useRef<HTMLInputElement>(null);
+  const bulkMinMaxInputRef = useRef<HTMLInputElement>(null);
 
   // Handle outside click for dropdown
   React.useEffect(() => {
@@ -297,6 +298,60 @@ export const MasterList: React.FC = () => {
     reader.readAsArrayBuffer(file);
   };
 
+  const handleBulkMinMaxUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const data = new Uint8Array(evt.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const wsname = workbook.SheetNames[0];
+        const ws = workbook.Sheets[wsname];
+        const jsonData = XLSX.utils.sheet_to_json(ws);
+
+        if (jsonData.length === 0) {
+          alert("Sheet is empty!");
+          return;
+        }
+
+        const entries: MinMaxEntry[] = jsonData.map((row: any) => {
+          const normalizedRow: any = {};
+          Object.keys(row).forEach(key => {
+            normalizedRow[key.toLowerCase().trim()] = row[key];
+          });
+
+          return {
+            itemCode: normalizedRow['item code'] || normalizedRow['code'] || '',
+            minStock: normalizedRow['min stock'] !== undefined ? (normalizedRow['min stock'] === '' ? null : Number(normalizedRow['min stock'])) : undefined,
+            maxStock: normalizedRow['max stock'] !== undefined ? (normalizedRow['max stock'] === '' ? null : Number(normalizedRow['max stock'])) : undefined,
+          };
+        }).filter(i => i.itemCode && (i.minStock !== undefined || i.maxStock !== undefined));
+
+        if (entries.length > 0) {
+          if (confirm(`Are you sure you want to update min/max limits for ${entries.length} items?`)) {
+            const res = await processBulkUpdateMinMax(entries);
+            if (res.errorCount > 0) {
+              alert(`Bulk update completed with ${res.successCount} successes and ${res.errorCount} errors.\n\nErrors:\n${res.errors.join('\n')}`);
+            } else {
+              alert(`Successfully updated ${res.successCount} items.`);
+            }
+          }
+        } else {
+           alert('No valid rows found. Ensure columns like "Item Code", "Min Stock", and "Max Stock" exist.');
+        }
+
+      } catch (error) {
+        console.error("Bulk limits error:", error);
+        alert("Failed to parse Excel file. Please check the format.");
+      } finally {
+        if (bulkMinMaxInputRef.current) bulkMinMaxInputRef.current.value = "";
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
   const exportToExcel = () => {
     if (items.length === 0) {
       alert("No items to export!");
@@ -376,6 +431,23 @@ export const MasterList: React.FC = () => {
           >
             <Sliders size={16} className="text-yellow-500 group-hover:scale-110 transition-transform" />
             <span className="hidden xl:inline">Bulk Adjust</span>
+          </button>
+
+          {/* Bulk Update Min/Max Trigger */}
+          <input 
+            type="file" 
+            ref={bulkMinMaxInputRef} 
+            onChange={handleBulkMinMaxUpload} 
+            accept=".xlsx, .xls, .csv" 
+            className="hidden" 
+          />
+          <button 
+            onClick={() => bulkMinMaxInputRef.current?.click()}
+            className="flex items-center gap-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 px-3 py-2 rounded-lg text-sm font-medium transition-all shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none group"
+            title="Bulk Set Min/Max Limits"
+          >
+            <ArrowUpDown size={16} className="text-teal-500 group-hover:scale-110 transition-transform" />
+            <span className="hidden xl:inline">Bulk Limits</span>
           </button>
 
           {/* Export Button */}
@@ -585,13 +657,25 @@ export const MasterList: React.FC = () => {
 
                   {/* Stock (Read Only) */}
                   <td className={`p-4 text-right font-bold ${
-                    (item.minStock !== undefined && item.minStock !== null && item.currentStock < item.minStock) || item.currentStock < 10 
+                    (item.minStock !== undefined && item.minStock !== null && item.currentStock < item.minStock)
                       ? 'text-red-500' 
                       : (item.maxStock !== undefined && item.maxStock !== null && item.currentStock > item.maxStock)
                         ? 'text-orange-500'
                         : 'text-gray-800'
                   }`}>
-                    {item.currentStock}
+                    <div className="flex items-center justify-end gap-1.5">
+                      {item.minStock !== undefined && item.minStock !== null && item.currentStock < item.minStock && (
+                        <span title={`Low Stock! Current stock (${item.currentStock}) is below the minimum required (${item.minStock}).`}>
+                          <AlertCircle size={16} className="text-red-500" />
+                        </span>
+                      )}
+                      {item.maxStock !== undefined && item.maxStock !== null && item.currentStock > item.maxStock && (
+                        <span title={`Overstock! Current stock (${item.currentStock}) is above the maximum allowed (${item.maxStock}).`}>
+                          <AlertCircle size={16} className="text-orange-500" />
+                        </span>
+                      )}
+                      <span>{item.currentStock}</span>
+                    </div>
                   </td>
 
                   {/* Actions */}
