@@ -69,6 +69,11 @@ export interface MinMaxEntry {
   maxStock?: number | null;
 }
 
+export interface LocationEntry {
+  itemCode: string;
+  location: string;
+}
+
 export interface BOMItem {
   itemCode: string;
   quantity: number; // Quantity required for 1 unit of FG

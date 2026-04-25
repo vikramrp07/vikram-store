@@ -1,12 +1,12 @@
 import React, { useState, useRef } from 'react';
 import { useInventory } from '../context/InventoryContext';
-import { Search, Edit2, Save, X, UploadCloud, FileSpreadsheet, Plus, ArrowDownCircle, Loader2, AlertCircle, Download, Barcode, Printer, Sliders, ArrowUpDown } from 'lucide-react';
-import { Item, CATEGORIES, UNITS, AdjustmentEntry, MinMaxEntry } from '../types';
+import { Search, Edit2, Save, X, UploadCloud, FileSpreadsheet, Plus, ArrowDownCircle, Loader2, AlertCircle, Download, Barcode, Printer, Sliders, ArrowUpDown, MapPin } from 'lucide-react';
+import { Item, CATEGORIES, UNITS, AdjustmentEntry, MinMaxEntry, LocationEntry } from '../types';
 import * as XLSX from 'xlsx';
 import BarcodeDisplay from 'react-barcode';
 
 export const MasterList: React.FC = () => {
-  const { items, updateItem, importItems, addItem, processInward, adjustStock, processBulkAdjustStock, processBulkUpdateMinMax } = useInventory();
+  const { items, updateItem, importItems, addItem, processInward, adjustStock, processBulkAdjustStock, processBulkUpdateMinMax, processBulkUpdateLocation } = useInventory();
   const [searchTerm, setSearchTerm] = useState('');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -15,6 +15,7 @@ export const MasterList: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bulkAdjustInputRef = useRef<HTMLInputElement>(null);
   const bulkMinMaxInputRef = useRef<HTMLInputElement>(null);
+  const bulkLocationInputRef = useRef<HTMLInputElement>(null);
 
   // Handle outside click for dropdown
   React.useEffect(() => {
@@ -352,6 +353,59 @@ export const MasterList: React.FC = () => {
     reader.readAsArrayBuffer(file);
   };
 
+  const handleBulkLocationUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const data = new Uint8Array(evt.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const wsname = workbook.SheetNames[0];
+        const ws = workbook.Sheets[wsname];
+        const jsonData = XLSX.utils.sheet_to_json(ws);
+
+        if (jsonData.length === 0) {
+          alert("Sheet is empty!");
+          return;
+        }
+
+        const entries: LocationEntry[] = jsonData.map((row: any) => {
+          const normalizedRow: any = {};
+          Object.keys(row).forEach(key => {
+            normalizedRow[key.toLowerCase().trim()] = row[key];
+          });
+
+          return {
+            itemCode: normalizedRow['item code'] || normalizedRow['code'] || '',
+            location: normalizedRow['location'] !== undefined ? String(normalizedRow['location']) : undefined,
+          };
+        }).filter(i => i.itemCode && i.location !== undefined) as LocationEntry[];
+
+        if (entries.length > 0) {
+          if (confirm(`Are you sure you want to update location for ${entries.length} items?`)) {
+            const res = await processBulkUpdateLocation(entries);
+            if (res.errorCount > 0) {
+              alert(`Bulk update completed with ${res.successCount} successes and ${res.errorCount} errors.\n\nErrors:\n${res.errors.join('\n')}`);
+            } else {
+              alert(`Successfully updated ${res.successCount} items.`);
+            }
+          }
+        } else {
+           alert('No valid rows found. Ensure columns like "Item Code" and "Location" exist.');
+        }
+
+      } catch (error) {
+        console.error("Bulk location error:", error);
+        alert("Failed to parse Excel file. Please check the format.");
+      } finally {
+        if (bulkLocationInputRef.current) bulkLocationInputRef.current.value = "";
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
   const exportToExcel = () => {
     if (items.length === 0) {
       alert("No items to export!");
@@ -448,6 +502,23 @@ export const MasterList: React.FC = () => {
           >
             <ArrowUpDown size={16} className="text-teal-500 group-hover:scale-110 transition-transform" />
             <span className="hidden xl:inline">Bulk Limits</span>
+          </button>
+
+          {/* Bulk Location Trigger */}
+          <input 
+            type="file" 
+            ref={bulkLocationInputRef} 
+            onChange={handleBulkLocationUpload} 
+            accept=".xlsx, .xls, .csv" 
+            className="hidden" 
+          />
+          <button 
+            onClick={() => bulkLocationInputRef.current?.click()}
+            className="flex items-center gap-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 px-3 py-2 rounded-lg text-sm font-medium transition-all shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none group"
+            title="Bulk Set Locations"
+          >
+            <MapPin size={16} className="text-indigo-500 group-hover:scale-110 transition-transform" />
+            <span className="hidden xl:inline">Bulk Locations</span>
           </button>
 
           {/* Export Button */}

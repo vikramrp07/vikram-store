@@ -56,6 +56,8 @@ function doPost(e) {
       return handleBulkAdjustStock(data);
     } else if (action === 'bulkUpdateMinMax') {
       return handleBulkUpdateMinMax(data);
+    } else if (action === 'bulkUpdateLocation') {
+      return handleBulkUpdateLocation(data);
     } else if (action === 'addItem') {
       return handleAddItem(data);
     } else if (action === 'updateItem') {
@@ -457,6 +459,41 @@ function handleBulkUpdateMinMax(data) {
       if (rowIndex) {
         if (entry.minStock !== undefined) master.getRange(rowIndex, 7).setValue(entry.minStock === null ? "" : entry.minStock);
         if (entry.maxStock !== undefined) master.getRange(rowIndex, 8).setValue(entry.maxStock === null ? "" : entry.maxStock);
+        success++;
+      } else {
+        throw new Error("Item not found");
+      }
+    } catch (e) {
+      errors.push(`Row ${idx+1}: ${e.message}`);
+    }
+  });
+  
+  return response({ status: 'success', successCount: success, errorCount: errors.length, errors: errors });
+}
+
+function handleBulkUpdateLocation(data) {
+  const ss = getSS();
+  const master = ss.getSheetByName('Master');
+  const masterData = master.getDataRange().getValues();
+  
+  let success = 0;
+  let errors = [];
+  
+  let codeMap = {};
+  for(let i=1; i<masterData.length; i++) {
+    codeMap[masterData[i][0]] = i + 1;
+  }
+  
+  data.entries.forEach((entry, idx) => {
+    try {
+      if (!entry.itemCode) {
+        throw new Error("Missing required field (Item Code)");
+      }
+
+      let rowIndex = codeMap[entry.itemCode];
+      
+      if (rowIndex) {
+        if (entry.location !== undefined) master.getRange(rowIndex, 9).setValue(entry.location === null ? "" : entry.location);
         success++;
       } else {
         throw new Error("Item not found");

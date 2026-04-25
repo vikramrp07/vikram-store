@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Item, LogEntry, TransactionType, InwardEntry, OutwardEntry, BOM, BOMItem, AdjustmentEntry, MinMaxEntry } from '../types';
+import { Item, LogEntry, TransactionType, InwardEntry, OutwardEntry, BOM, BOMItem, AdjustmentEntry, MinMaxEntry, LocationEntry } from '../types';
 
 // =========================================================================================
 // 🚀 CONFIGURATION: PASTE YOUR GOOGLE WEB APP URL BELOW
@@ -30,6 +30,7 @@ interface InventoryContextType {
   adjustStock: (code: string, newQty: number, reason: string) => Promise<void>;
   processBulkAdjustStock: (entries: AdjustmentEntry[]) => Promise<{ successCount: number; errorCount: number; errors: string[] }>;
   processBulkUpdateMinMax: (entries: MinMaxEntry[]) => Promise<{ successCount: number; errorCount: number; errors: string[] }>;
+  processBulkUpdateLocation: (entries: LocationEntry[]) => Promise<{ successCount: number; errorCount: number; errors: string[] }>;
   setConnectionUrl: (url: string) => void;
 }
 
@@ -288,6 +289,48 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
             ...existingItem, 
             ...(entry.minStock !== undefined && { minStock: entry.minStock }),
             ...(entry.maxStock !== undefined && { maxStock: entry.maxStock })
+          });
+
+          successCount++;
+        } catch (err: any) {
+          errorCount++;
+          errors.push(err.message);
+        }
+      });
+
+      setItems(Array.from(currentItemsMap.values()));
+      return { successCount, errorCount, errors };
+    }
+  };
+
+  const processBulkUpdateLocation = async (entries: LocationEntry[]) => {
+    if (apiUrl) {
+      const result = await postToApi({ action: 'bulkUpdateLocation', entries });
+      await fetchData();
+      return { 
+        successCount: result?.successCount || 0, 
+        errorCount: result?.errorCount || 0, 
+        errors: result?.errors || [] 
+      };
+    } else {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      let successCount = 0;
+      let errorCount = 0;
+      const errors: string[] = [];
+      
+      const currentItemsMap = new Map<string, Item>();
+      items.forEach(i => currentItemsMap.set(i.code, i));
+
+      entries.forEach((entry, index) => {
+        try {
+          if (!entry.itemCode) throw new Error(`Row ${index + 1}: Missing Item Code`);
+          
+          const existingItem = currentItemsMap.get(entry.itemCode);
+          if (!existingItem) throw new Error(`Row ${index + 1}: Item not found`);
+
+          currentItemsMap.set(entry.itemCode, { 
+            ...existingItem, 
+            ...(entry.location !== undefined && { location: entry.location })
           });
 
           successCount++;
@@ -717,6 +760,7 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
       adjustStock,
       processBulkAdjustStock,
       processBulkUpdateMinMax,
+      processBulkUpdateLocation,
       setConnectionUrl 
     }}>
       {children}

@@ -7,7 +7,8 @@ import { Logs } from './components/Logs';
 import { StockHistory } from './components/StockHistory';
 import { BOMManager } from './components/BOMManager';
 import { RequirementCalculator } from './components/RequirementCalculator';
-import { LayoutDashboard, ArrowDownCircle, ArrowUpCircle, Database, FileText, Menu, X, Box, Settings, Link as LinkIcon, CheckCircle, AlertTriangle, History, List, Calculator } from 'lucide-react';
+import HelpGuide from './components/HelpGuide';
+import { LayoutDashboard, ArrowDownCircle, ArrowUpCircle, Database, FileText, Menu, X, Box, Settings, Link as LinkIcon, CheckCircle, AlertTriangle, History, List, Calculator, HelpCircle } from 'lucide-react';
 import { useInventory } from './context/InventoryContext';
 
 const App: React.FC = () => {
@@ -28,6 +29,7 @@ const App: React.FC = () => {
     { id: 'requirements', label: 'Requirement Calc', icon: Calculator },
     { id: 'history', label: 'Stock History', icon: History },
     { id: 'logs', label: 'Transaction Logs', icon: FileText },
+    { id: 'help', label: 'Help Guide', icon: HelpCircle },
   ];
 
   const renderContent = () => {
@@ -40,6 +42,7 @@ const App: React.FC = () => {
       case 'requirements': return <RequirementCalculator />;
       case 'history': return <StockHistory />;
       case 'logs': return <Logs />;
+      case 'help': return <HelpGuide />;
       default: return <Dashboard />;
     }
   };
