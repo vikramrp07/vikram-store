@@ -265,16 +265,19 @@ export const MasterList: React.FC = () => {
         const entries: AdjustmentEntry[] = jsonData.map((row: any) => {
           const normalizedRow: any = {};
           Object.keys(row).forEach(key => {
-            normalizedRow[key.toLowerCase().trim()] = row[key];
+            normalizedRow[key.toLowerCase().replace(/[^a-z0-9]/g, '')] = row[key];
           });
 
+          const code = normalizedRow['itemcode'] || normalizedRow['code'] || normalizedRow['sku'] || '';
+          let qty = normalizedRow['newquantity'] || normalizedRow['quantity'] || normalizedRow['stock'] || normalizedRow['currentstock'] || normalizedRow['qty'];
+
           return {
-            itemCode: normalizedRow['item code'] || normalizedRow['code'] || '',
-            newQuantity: Number(normalizedRow['new quantity'] || normalizedRow['quantity'] || normalizedRow['stock'] || 0),
-            reason: normalizedRow['reason'] || 'Bulk Adjustment',
+            itemCode: String(code).trim(),
+            newQuantity: qty !== undefined && qty !== '' ? Number(qty) : undefined,
+            reason: normalizedRow['reason'] || normalizedRow['remarks'] || 'Bulk Adjustment',
             date: new Date().toISOString()
           };
-        }).filter(i => i.itemCode && i.newQuantity !== undefined && !isNaN(i.newQuantity));
+        }).filter(i => i.itemCode && i.newQuantity !== undefined && !isNaN(i.newQuantity)) as AdjustmentEntry[];
 
         if (entries.length > 0) {
           if (confirm(`Are you sure you want to bulk adjust ${entries.length} items? This action cannot be easily undone.`)) {
@@ -286,7 +289,7 @@ export const MasterList: React.FC = () => {
             }
           }
         } else {
-           alert('No valid rows found. Ensure columns like "Item Code" and "New Quantity" exist.');
+           alert('No valid rows found.\n\nPlease ensure your Excel file has headers like "Code" and "New Quantity" (or "Current Stock").');
         }
 
       } catch (error) {
@@ -317,18 +320,47 @@ export const MasterList: React.FC = () => {
           return;
         }
 
+        let hasNaNError = false;
+
         const entries: MinMaxEntry[] = jsonData.map((row: any) => {
           const normalizedRow: any = {};
           Object.keys(row).forEach(key => {
-            normalizedRow[key.toLowerCase().trim()] = row[key];
+            normalizedRow[key.toLowerCase().replace(/[^a-z0-9]/g, '')] = row[key];
           });
 
+          const code = normalizedRow['itemcode'] || normalizedRow['code'] || normalizedRow['sku'] || '';
+          
+          let minVal = normalizedRow['minstock'] !== undefined ? normalizedRow['minstock'] : normalizedRow['min'];
+          let maxVal = normalizedRow['maxstock'] !== undefined ? normalizedRow['maxstock'] : normalizedRow['max'];
+
+          let minStock: number | null | undefined = undefined;
+          if (minVal !== undefined) {
+             if (String(minVal).trim() === '') minStock = null;
+             else {
+               minStock = Number(minVal);
+               if (isNaN(minStock)) hasNaNError = true;
+             }
+          }
+
+          let maxStock: number | null | undefined = undefined;
+          if (maxVal !== undefined) {
+             if (String(maxVal).trim() === '') maxStock = null;
+             else {
+               maxStock = Number(maxVal);
+               if (isNaN(maxStock)) hasNaNError = true;
+             }
+          }
+
           return {
-            itemCode: normalizedRow['item code'] || normalizedRow['code'] || '',
-            minStock: normalizedRow['min stock'] !== undefined ? (normalizedRow['min stock'] === '' ? null : Number(normalizedRow['min stock'])) : undefined,
-            maxStock: normalizedRow['max stock'] !== undefined ? (normalizedRow['max stock'] === '' ? null : Number(normalizedRow['max stock'])) : undefined,
+            itemCode: String(code).trim(),
+            minStock: minStock !== undefined && !isNaN(minStock as any) ? minStock : undefined,
+            maxStock: maxStock !== undefined && !isNaN(maxStock as any) ? maxStock : undefined,
           };
         }).filter(i => i.itemCode && (i.minStock !== undefined || i.maxStock !== undefined));
+
+        if (hasNaNError) {
+           console.warn("Some rows contained invalid numbers for min/max and were skipped.");
+        }
 
         if (entries.length > 0) {
           if (confirm(`Are you sure you want to update min/max limits for ${entries.length} items?`)) {
@@ -340,7 +372,7 @@ export const MasterList: React.FC = () => {
             }
           }
         } else {
-           alert('No valid rows found. Ensure columns like "Item Code", "Min Stock", and "Max Stock" exist.');
+           alert('No valid rows found.\n\nPlease ensure your Excel file has headers like "Code", "Min Stock", and "Max Stock".\nYou can also export your current inventory, update the limits, and upload that file.');
         }
 
       } catch (error) {
@@ -374,12 +406,15 @@ export const MasterList: React.FC = () => {
         const entries: LocationEntry[] = jsonData.map((row: any) => {
           const normalizedRow: any = {};
           Object.keys(row).forEach(key => {
-            normalizedRow[key.toLowerCase().trim()] = row[key];
+            normalizedRow[key.toLowerCase().replace(/[^a-z0-9]/g, '')] = row[key];
           });
 
+          const code = normalizedRow['itemcode'] || normalizedRow['code'] || normalizedRow['sku'] || '';
+          let loc = normalizedRow['location'] !== undefined ? normalizedRow['location'] : normalizedRow['loc'];
+
           return {
-            itemCode: normalizedRow['item code'] || normalizedRow['code'] || '',
-            location: normalizedRow['location'] !== undefined ? String(normalizedRow['location']) : undefined,
+            itemCode: String(code).trim(),
+            location: loc !== undefined ? String(loc).trim() : undefined,
           };
         }).filter(i => i.itemCode && i.location !== undefined) as LocationEntry[];
 
@@ -393,7 +428,7 @@ export const MasterList: React.FC = () => {
             }
           }
         } else {
-           alert('No valid rows found. Ensure columns like "Item Code" and "Location" exist.');
+           alert('No valid rows found.\n\nPlease ensure your Excel file has headers like "Code" and "Location".\nYou can also export your current inventory, update the locations, and upload that file.');
         }
 
       } catch (error) {
