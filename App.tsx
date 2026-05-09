@@ -8,7 +8,8 @@ import { StockHistory } from './components/StockHistory';
 import { BOMManager } from './components/BOMManager';
 import { RequirementCalculator } from './components/RequirementCalculator';
 import HelpGuide from './components/HelpGuide';
-import { LayoutDashboard, ArrowDownCircle, ArrowUpCircle, Database, FileText, Menu, X, Box, Settings, Link as LinkIcon, CheckCircle, AlertTriangle, History, List, Calculator, HelpCircle } from 'lucide-react';
+import ScannerOperations from './components/ScannerOperations';
+import { LayoutDashboard, ArrowDownCircle, ArrowUpCircle, Database, FileText, Menu, X, Box, Settings, Link as LinkIcon, CheckCircle, AlertTriangle, History, List, Calculator, HelpCircle, ScanLine } from 'lucide-react';
 import { useInventory } from './context/InventoryContext';
 
 const App: React.FC = () => {
@@ -22,9 +23,10 @@ const App: React.FC = () => {
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'master', label: 'Master List', icon: Database },
+    { id: 'scanner', label: 'Scan & Count', icon: ScanLine },
     { id: 'inward', label: 'Inward Stock', icon: ArrowDownCircle },
     { id: 'outward', label: 'Outward Stock', icon: ArrowUpCircle },
-    { id: 'master', label: 'Master List', icon: Database },
     { id: 'bom', label: 'Define BOM', icon: List },
     { id: 'requirements', label: 'Requirement Calc', icon: Calculator },
     { id: 'history', label: 'Stock History', icon: History },
@@ -35,9 +37,10 @@ const App: React.FC = () => {
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard': return <Dashboard />;
+      case 'master': return <MasterList />;
+      case 'scanner': return <ScannerOperations />;
       case 'inward': return <InwardForm />;
       case 'outward': return <OutwardForm />;
-      case 'master': return <MasterList />;
       case 'bom': return <BOMManager />;
       case 'requirements': return <RequirementCalculator />;
       case 'history': return <StockHistory />;
