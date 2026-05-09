@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useInventory } from '../context/InventoryContext';
 import { ScanLine, ArrowDownCircle, ArrowUpCircle, ClipboardList, CheckCircle, AlertCircle, Loader2, Volume2, VolumeX, History, Camera, XCircle } from 'lucide-react';
 import { Item } from '../types';
-import { Html5QrcodeScanner } from 'html5-qrcode';
+import { Html5Qrcode } from 'html5-qrcode';
 
 type ScanMode = 'put' | 'take' | 'count';
 
@@ -71,29 +71,53 @@ const ScannerOperations: React.FC = () => {
   }, [mode, selectedItem, showCamera]);
 
   useEffect(() => {
-    if (showCamera && !selectedItem) {
-      const html5QrcodeScanner = new Html5QrcodeScanner(
-        "reader",
-        { fps: 10, qrbox: { width: 250, height: 250 } },
-        /* verbose= */ false
-      );
-      
-      html5QrcodeScanner.render((decodedText) => {
-        // Stop scanning after success to prevent multiple scans
-        html5QrcodeScanner.clear().catch(console.error);
-        setShowCamera(false);
-        setScannedCode(decodedText);
-        handleItemLookup(decodedText);
-      }, (error) => {
-        // Handle read error silently
-      });
+    let html5QrCode: Html5Qrcode | null = null;
+    let isComponentMounted = true;
 
-      return () => {
-        html5QrcodeScanner.clear().catch(error => {
-          console.error("Failed to clear html5QrcodeScanner. ", error);
-        });
-      };
+    if (showCamera && !selectedItem) {
+      // Small timeout to ensure the DOM element exists
+      setTimeout(() => {
+        if (!isComponentMounted) return;
+        
+        try {
+          html5QrCode = new Html5Qrcode("reader");
+          html5QrCode.start(
+            { facingMode: "environment" },
+            {
+              fps: 10,
+              qrbox: { width: 250, height: 250 },
+            },
+            (decodedText) => {
+              if (html5QrCode && html5QrCode.isScanning) {
+                html5QrCode.stop().then(() => {
+                  setShowCamera(false);
+                  setScannedCode(decodedText);
+                  handleItemLookup(decodedText);
+                }).catch(console.error);
+              }
+            },
+            (errorMessage) => {
+              // Handle read error silently
+            }
+          ).catch(err => {
+            console.error("Camera startup error: ", err);
+            setMessage({ type: 'error', text: 'Could not start camera. Please ensure permissions are granted.' });
+            setShowCamera(false);
+          });
+        } catch (e) {
+            console.error("Html5Qrcode initialization error", e);
+        }
+      }, 100);
     }
+
+    return () => {
+      isComponentMounted = false;
+      if (html5QrCode && html5QrCode.isScanning) {
+        html5QrCode.stop().catch(error => {
+          console.error("Failed to clear html5Qrcode. ", error);
+        });
+      }
+    };
   }, [showCamera, selectedItem]);
 
   const handleItemLookup = (codeToLookup: string) => {
@@ -317,7 +341,7 @@ const ScannerOperations: React.FC = () => {
                 ) : (
                   <div className="w-full h-full flex flex-col items-center justify-center">
                     <div className="w-full max-w-md mx-auto aspect-square relative rounded-2xl overflow-hidden shadow-2xl shadow-black/50 [&_video]:w-full [&_video]:h-full [&_video]:object-cover border-4 border-indigo-500/30 bg-black">
-                      <div id="reader" className="w-full h-full border-none! bg-black"></div>
+                      <div id="reader" className="w-full h-full border-none bg-black"></div>
                       
                       {/* Scanning Overlay UI overlaying the video */}
                       <div className="absolute inset-0 pointer-events-none">
