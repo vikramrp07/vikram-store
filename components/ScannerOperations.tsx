@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useInventory } from '../context/InventoryContext';
-import { ScanLine, ArrowDownCircle, ArrowUpCircle, ClipboardList, CheckCircle, AlertCircle, Loader2, Volume2, VolumeX, History, Camera, XCircle } from 'lucide-react';
+import { ScanLine, ArrowDownCircle, ArrowUpCircle, ClipboardList, CheckCircle, AlertCircle, Loader2, Volume2, VolumeX, History, Camera, XCircle, Zap } from 'lucide-react';
 import { Item } from '../types';
 import { Html5Qrcode } from 'html5-qrcode';
 
@@ -59,6 +59,7 @@ const ScannerOperations: React.FC = () => {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [recentScans, setRecentScans] = useState<RecentScan[]>([]);
   const [showCamera, setShowCamera] = useState(false);
+  const [quickMode, setQuickMode] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const qtyRef = useRef<HTMLInputElement>(null);
@@ -68,7 +69,7 @@ const ScannerOperations: React.FC = () => {
     if (!selectedItem && !showCamera) {
       inputRef.current?.focus();
     }
-  }, [mode, selectedItem, showCamera]);
+  }, [mode, selectedItem, showCamera, quickMode]);
 
   useEffect(() => {
     let html5QrCode: Html5Qrcode | null = null;
@@ -89,11 +90,9 @@ const ScannerOperations: React.FC = () => {
             },
             (decodedText) => {
               if (html5QrCode && html5QrCode.isScanning) {
-                html5QrCode.stop().then(() => {
-                  setShowCamera(false);
-                  setScannedCode(decodedText);
-                  handleItemLookup(decodedText);
-                }).catch(console.error);
+                html5QrCode.pause(); // Pause rather than stop for faster scanning
+                setScannedCode(decodedText);
+                handleItemLookup(decodedText, html5QrCode);
               }
             },
             (errorMessage) => {
@@ -120,29 +119,95 @@ const ScannerOperations: React.FC = () => {
     };
   }, [showCamera, selectedItem]);
 
-  const handleItemLookup = (codeToLookup: string) => {
+  const processQuickScan = async (item: Item, qrScanner?: Html5Qrcode) => {
+    setLoading(true);
+    try {
+      const qty = 1;
+      const tPartyName = mode === 'count' ? 'Quick Count' : (mode === 'take' ? 'Quick Issue' : 'Quick Receipt');
+      
+      if (mode === 'put') {
+        await processInward({
+          itemCode: item.code,
+          quantity: qty,
+          supplier: tPartyName,
+          date: new Date().toISOString()
+        });
+      } else if (mode === 'take') {
+        if (item.currentStock < qty) {
+           throw new Error(`Insufficient stock for ${item.name}`);
+        }
+        await processOutward({
+          itemCode: item.code,
+          quantity: qty,
+          customer: tPartyName,
+          date: new Date().toISOString()
+        });
+      } else if (mode === 'count') {
+        await adjustStock(item.code, qty, tPartyName);
+      }
+      playBeep('success', soundEnabled);
+      setMessage({ type: 'success', text: `Quick ${mode}: +${qty} ${item.name}` });
+      addRecentScan(item.name, item.code, qty, true);
+    } catch (err: any) {
+      playBeep('error', soundEnabled);
+      setMessage({ type: 'error', text: err.message || 'Operation failed.' });
+      addRecentScan(item.name, item.code, 1, false);
+    } finally {
+      setLoading(false);
+      setScannedCode('');
+      
+      // Resume scanner if it was passed
+      if (qrScanner && qrScanner.isScanning) {
+        setTimeout(() => {
+          qrScanner.resume();
+        }, 1500); // Wait a literal second to avoid accidental multiple scans of same code
+      } else {
+        setTimeout(() => inputRef.current?.focus(), 100);
+      }
+    }
+  };
+
+  const handleItemLookup = (codeToLookup: string, qrScanner?: Html5Qrcode) => {
     setMessage(null);
     const code = codeToLookup.trim();
-    if (!code) return;
+    if (!code) {
+       if (qrScanner) qrScanner.resume();
+       return;
+    }
 
     const item = items.find(i => i.code.toLowerCase() === code.toLowerCase());
     if (item) {
-      setSelectedItem(item);
-      setScannedCode(''); // clear for next time
-      setTimeout(() => {
-        qtyRef.current?.focus();
-        qtyRef.current?.select();
-      }, 100);
-      
-      // Default party name based on mode
-      if (mode === 'count') setPartyName('Physical Count');
-      else if (mode === 'take') setPartyName('Issue');
-      else if (mode === 'put') setPartyName(''); // Require supplier
+      if (quickMode) {
+        processQuickScan(item, qrScanner);
+      } else {
+        if (qrScanner) {
+          qrScanner.stop().then(() => {
+            setShowCamera(false);
+          }).catch(console.error);
+        }
+        setSelectedItem(item);
+        setScannedCode(''); // clear for next time
+        setTimeout(() => {
+          qtyRef.current?.focus();
+          qtyRef.current?.select();
+        }, 100);
+        
+        // Default party name based on mode
+        if (mode === 'count') setPartyName('Physical Count');
+        else if (mode === 'take') setPartyName('Issue');
+        else if (mode === 'put') setPartyName(''); // Require supplier
+      }
     } else {
       playBeep('error', soundEnabled);
       setMessage({ type: 'error', text: `Item with code "${code}" not found.` });
       setScannedCode('');
-      inputRef.current?.focus();
+      if (qrScanner && qrScanner.isScanning) {
+        setTimeout(() => {
+           qrScanner.resume();
+        }, 2000);
+      } else {
+        inputRef.current?.focus();
+      }
     }
   };
 
@@ -249,13 +314,23 @@ const ScannerOperations: React.FC = () => {
             <ScanLine className="mr-3 text-indigo-600" strokeWidth={2.5} size={28} />
             Scan & Actions
           </h2>
-          <button 
-            onClick={() => setSoundEnabled(!soundEnabled)}
-            className="text-gray-400 hover:text-indigo-600 p-2.5 rounded-full hover:bg-indigo-50 transition-all active:scale-95"
-            title={soundEnabled ? "Mute Sounds" : "Enable Sounds"}
-          >
-            {soundEnabled ? <Volume2 size={22} /> : <VolumeX size={22} />}
-          </button>
+          <div className="flex items-center space-x-2">
+            <button 
+              onClick={() => setQuickMode(!quickMode)}
+              className={`p-2.5 rounded-full transition-all active:scale-95 flex items-center ${quickMode ? 'bg-amber-100 text-amber-600 shadow-inner' : 'text-gray-400 hover:text-amber-500 hover:bg-amber-50'}`}
+              title={quickMode ? "Fast Mode On (Auto-submits Qty 1)" : "Fast Mode Off"}
+            >
+              <Zap size={22} className={quickMode ? "fill-amber-500" : ""} />
+              {quickMode && <span className="ml-1 text-sm font-bold">FAST</span>}
+            </button>
+            <button 
+              onClick={() => setSoundEnabled(!soundEnabled)}
+              className="text-gray-400 hover:text-indigo-600 p-2.5 rounded-full hover:bg-indigo-50 transition-all active:scale-95"
+              title={soundEnabled ? "Mute Sounds" : "Enable Sounds"}
+            >
+              {soundEnabled ? <Volume2 size={22} /> : <VolumeX size={22} />}
+            </button>
+          </div>
         </div>
 
         {/* Mode Selector */}
