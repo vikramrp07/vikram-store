@@ -9,7 +9,7 @@ import { BOMManager } from './components/BOMManager';
 import { RequirementCalculator } from './components/RequirementCalculator';
 import HelpGuide from './components/HelpGuide';
 import ScannerOperations from './components/ScannerOperations';
-import { LayoutDashboard, ArrowDownCircle, ArrowUpCircle, Database, FileText, Menu, X, Box, Settings, Link as LinkIcon, CheckCircle, AlertTriangle, History, List, Calculator, HelpCircle, ScanLine } from 'lucide-react';
+import { LayoutDashboard, ArrowDownCircle, ArrowUpCircle, Database, FileText, Menu, X, Box, Settings, Link as LinkIcon, CheckCircle, AlertTriangle, History, List, Calculator, HelpCircle, ScanLine, CloudOff, Cloud, RefreshCw } from 'lucide-react';
 import { useInventory } from './context/InventoryContext';
 
 const App: React.FC = () => {
@@ -17,7 +17,7 @@ const App: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   
-  const { isConnected, setConnectionUrl, connectionError } = useInventory();
+  const { isConnected, setConnectionUrl, connectionError, isOffline, syncQueueLength } = useInventory();
   const [apiUrlInput, setApiUrlInput] = useState('');
   const [urlError, setUrlError] = useState('');
 
@@ -106,6 +106,20 @@ const App: React.FC = () => {
              </div>
            )}
 
+           {(isOffline || syncQueueLength > 0) && isConnected && (
+             <div className={`p-3 rounded-lg border mb-2 ${isOffline ? 'bg-orange-50 border-orange-200' : 'bg-blue-50 border-blue-200'}`}>
+               <div className="flex items-center mb-1">
+                 {isOffline ? <CloudOff size={16} className="mr-2 text-orange-600"/> : <RefreshCw size={16} className="mr-2 text-blue-600 animate-spin"/>}
+                 <span className={`text-xs font-bold ${isOffline ? 'text-orange-700' : 'text-blue-700'}`}>
+                   {isOffline ? 'Offline Mode' : 'Syncing Data...'}
+                 </span>
+               </div>
+               <p className={`text-xs leading-tight ${isOffline ? 'text-orange-600' : 'text-blue-600'}`}>
+                 {syncQueueLength} changes pending sync.
+               </p>
+             </div>
+           )}
+
            <button 
              onClick={() => setShowSettings(true)}
              className={`w-full p-3 rounded-lg text-xs flex items-center space-x-2 transition-colors ${isConnected && !connectionError ? 'bg-green-50 text-green-800 border border-green-100' : 'bg-blue-50 text-blue-800 hover:bg-blue-100'}`}
@@ -124,6 +138,11 @@ const App: React.FC = () => {
         <div className="flex items-center">
           <Box className="text-blue-600 mr-2" size={24} />
           <h1 className="text-lg font-bold text-gray-800">VIKRAM STORE</h1>
+          {(isOffline || syncQueueLength > 0) && isConnected && (
+            <div className="ml-2 flex items-center">
+               {isOffline ? <CloudOff size={18} className="text-orange-500" /> : <RefreshCw size={18} className="text-blue-500 animate-spin" />}
+            </div>
+          )}
         </div>
         <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="text-gray-600">
           {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}

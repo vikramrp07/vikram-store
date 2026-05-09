@@ -85,7 +85,7 @@ const ScannerOperations: React.FC = () => {
           html5QrCode.start(
             { facingMode: "environment" },
             {
-              fps: 10,
+              fps: 60,
               qrbox: { width: 250, height: 250 },
             },
             (decodedText) => {
@@ -100,7 +100,13 @@ const ScannerOperations: React.FC = () => {
             }
           ).catch(err => {
             console.error("Camera startup error: ", err);
-            setMessage({ type: 'error', text: 'Could not start camera. Please ensure permissions are granted.' });
+            let errorText = 'Could not start camera. Please ensure permissions are granted.';
+            if (err?.name === 'NotAllowedError' || err?.message?.includes('Permission denied') || String(err).includes('NotAllowedError')) {
+              errorText = 'Camera permission denied. If you are in a preview window, try opening the app in a new tab. Otherwise, please allow camera access in your browser settings.';
+            } else if (err?.name === 'NotFoundError' || String(err).includes('NotFoundError')) {
+              errorText = 'No camera found on this device.';
+            }
+            setMessage({ type: 'error', text: errorText });
             setShowCamera(false);
           });
         } catch (e) {
@@ -160,7 +166,7 @@ const ScannerOperations: React.FC = () => {
       if (qrScanner && qrScanner.isScanning) {
         setTimeout(() => {
           qrScanner.resume();
-        }, 1500); // Wait a literal second to avoid accidental multiple scans of same code
+        }, 500); // 500ms delay to avoid accidental multiple scans of same code, but fast enough for actual use
       } else {
         setTimeout(() => inputRef.current?.focus(), 100);
       }
@@ -204,7 +210,7 @@ const ScannerOperations: React.FC = () => {
       if (qrScanner && qrScanner.isScanning) {
         setTimeout(() => {
            qrScanner.resume();
-        }, 2000);
+        }, 500);
       } else {
         inputRef.current?.focus();
       }
@@ -415,18 +421,33 @@ const ScannerOperations: React.FC = () => {
                   </>
                 ) : (
                   <div className="w-full h-full flex flex-col items-center justify-center">
-                    <div className="w-full max-w-md mx-auto aspect-square relative rounded-2xl overflow-hidden shadow-2xl shadow-black/50 [&_video]:w-full [&_video]:h-full [&_video]:object-cover border-4 border-indigo-500/30 bg-black">
+                    <style>{`
+                      #reader { border: none !important; background: transparent !important; }
+                      #reader img { display: none !important; }
+                      #reader__dashboard_section_csr { display: none !important; }
+                      #reader__dashboard_section_swaplink { display: none !important; }
+                      @keyframes scan {
+                        0% { top: 2rem; opacity: 0; }
+                        10% { opacity: 1; }
+                        90% { opacity: 1; }
+                        100% { top: calc(100% - 2rem); opacity: 0; }
+                      }
+                      .animate-scan-line {
+                        animation: scan 2s linear infinite;
+                      }
+                    `}</style>
+                    <div className="w-full max-w-md mx-auto aspect-square relative rounded-2xl overflow-hidden shadow-2xl shadow-indigo-500/20 [&_video]:w-full [&_video]:h-full [&_video]:object-cover border-4 border-indigo-500/30 bg-black">
                       <div id="reader" className="w-full h-full border-none bg-black"></div>
                       
                       {/* Scanning Overlay UI overlaying the video */}
-                      <div className="absolute inset-0 pointer-events-none">
+                      <div className="absolute inset-0 pointer-events-none z-10">
                         {/* Corner brackets */}
-                        <div className="absolute top-8 left-8 w-12 h-12 border-t-4 border-l-4 border-indigo-500 rounded-tl-lg"></div>
-                        <div className="absolute top-8 right-8 w-12 h-12 border-t-4 border-r-4 border-indigo-500 rounded-tr-lg"></div>
-                        <div className="absolute bottom-8 left-8 w-12 h-12 border-b-4 border-l-4 border-indigo-500 rounded-bl-lg"></div>
-                        <div className="absolute bottom-8 right-8 w-12 h-12 border-b-4 border-r-4 border-indigo-500 rounded-br-lg"></div>
+                        <div className="absolute top-8 left-8 w-12 h-12 border-t-4 border-l-4 border-indigo-500 rounded-tl-2xl"></div>
+                        <div className="absolute top-8 right-8 w-12 h-12 border-t-4 border-r-4 border-indigo-500 rounded-tr-2xl"></div>
+                        <div className="absolute bottom-8 left-8 w-12 h-12 border-b-4 border-l-4 border-indigo-500 rounded-bl-2xl"></div>
+                        <div className="absolute bottom-8 right-8 w-12 h-12 border-b-4 border-r-4 border-indigo-500 rounded-br-2xl"></div>
                         {/* Scanning Line Animation */}
-                        <div className="absolute top-1/2 left-8 right-8 h-0.5 bg-red-500 shadow-[0_0_10px_red] opacity-70 animate-[pulse_1s_ease-in-out_infinite] -translate-y-1/2"></div>
+                        <div className="absolute left-8 right-8 h-1 bg-indigo-400 shadow-[0_0_15px_4px_rgba(99,102,241,0.8)] rounded-full opacity-90 animate-scan-line"></div>
                       </div>
                     </div>
                     <button

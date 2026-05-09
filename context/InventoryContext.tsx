@@ -31,6 +31,8 @@ interface InventoryContextType {
   processBulkAdjustStock: (entries: AdjustmentEntry[]) => Promise<{ successCount: number; errorCount: number; errors: string[] }>;
   processBulkUpdateMinMax: (entries: MinMaxEntry[]) => Promise<{ successCount: number; errorCount: number; errors: string[] }>;
   processBulkUpdateLocation: (entries: LocationEntry[]) => Promise<{ successCount: number; errorCount: number; errors: string[] }>;
+  isOffline: boolean;
+  syncQueueLength: number;
   setConnectionUrl: (url: string) => void;
 }
 
@@ -53,6 +55,84 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
   const [boms, setBoms] = useState<BOM[]>([]);
   const [loading, setLoading] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
+
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const [syncQueue, setSyncQueue] = useState<any[]>(() => {
+    try {
+      const stored = localStorage.getItem('inventory_sync_queue');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOffline(false);
+    const handleOffline = () => setIsOffline(true);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('inventory_sync_queue', JSON.stringify(syncQueue));
+    if (!isOffline && syncQueue.length > 0 && apiUrl && !isSyncing) {
+      processSyncQueue();
+    }
+  }, [isOffline, syncQueue, apiUrl]);
+
+  const processSyncQueue = async () => {
+    if (isSyncing || syncQueue.length === 0 || !apiUrl) return;
+    setIsSyncing(true);
+    
+    let updatedQueue = [...syncQueue];
+    let hasError = false;
+
+    while(updatedQueue.length > 0) {
+      const payload = updatedQueue[0];
+      try {
+        const response = await fetch(apiUrl, {
+          method: 'POST',
+          credentials: 'omit',
+          redirect: 'follow',
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify(payload)
+        });
+        
+        if (!response.ok) throw new Error(`Network error during sync: ${response.status}`);
+        
+        const text = await response.text();
+        let json;
+        try {
+          json = JSON.parse(text);
+          if (json.status === 'error') throw new Error(json.message);
+        } catch(e) {
+             throw new Error("Invalid response from server during sync.");
+        }
+        
+        // Success
+        updatedQueue.shift();
+        setSyncQueue([...updatedQueue]);
+      } catch (e: any) {
+        console.error("Sync failed, will retry later", e);
+        hasError = true;
+        break; 
+      }
+    }
+    
+    setIsSyncing(false);
+    
+    if (hasError) {
+      setConnectionError("Failed to sync some offline changes. Will retry later.");
+    } else {
+      setConnectionError(null);
+      fetchData().catch(console.error);
+    }
+  };
 
   // Fetch Data on Load or when URL changes
   useEffect(() => {
@@ -136,51 +216,63 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
     if (!apiUrl) return; 
     setConnectionError(null);
     
-    // Use text/plain to avoid CORS Preflight (OPTIONS)
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      credentials: 'omit',
-      redirect: 'follow',
-      headers: {
-        "Content-Type": "text/plain;charset=utf-8", 
-      },
-      body: JSON.stringify(payload)
-    });
-
-    if (!response.ok) {
-        throw new Error(`API Request Failed: ${response.status}`);
+    if (isOffline) {
+       setSyncQueue(prev => [...prev, payload]);
+       return { status: 'success', queued: true };
     }
-    
-    const text = await response.text();
-    let json;
+
     try {
-        json = JSON.parse(text);
-    } catch(e) {
-        console.warn("Could not parse POST response", e);
-        // Sometimes a redirect happens and we get HTML, but action succeeded. 
-        // We throw if we can't confirm success, to be safe.
-        throw new Error("Invalid response from server during save.");
-    }
+      // Use text/plain to avoid CORS Preflight (OPTIONS)
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        credentials: 'omit', // Crucial to omit credentials properly to avoid CORS with Google Scripts
+        redirect: 'follow',  // Important to follow the 302 redirect correctly without credentials
+        headers: {
+          "Content-Type": "text/plain;charset=utf-8", 
+        },
+        body: JSON.stringify(payload)
+      });
 
-    if(json.status === 'error') throw new Error(json.message);
-    return json;
+      if (!response.ok) {
+          throw new Error(`API Request Failed: ${response.status}`);
+      }
+      
+      const text = await response.text();
+      let json;
+      try {
+          json = JSON.parse(text);
+      } catch(e) {
+          console.warn("Could not parse POST response", e);
+          // Sometimes a redirect happens and we get HTML, but action succeeded. 
+          // We throw if we can't confirm success, to be safe.
+          throw new Error("Invalid response from server during save.");
+      }
+
+      if(json.status === 'error') throw new Error(json.message);
+      return json;
+    } catch (error: any) {
+       // If network error (TypeError) or other fetch issues, queue it
+       if (error instanceof TypeError || error.message.includes('Failed to fetch') || error.message.includes('NetworkError') || error.message.includes('Network request failed')) {
+           console.warn("Network error during API call, queuing operation...");
+           setSyncQueue(prev => [...prev, payload]);
+           setIsOffline(true); // Treat as offline
+           return { status: 'success', queued: true };
+       }
+       throw error; 
+    }
   };
 
   const addItem = async (newItem: Item) => {
+    setItems(prev => [...prev, newItem]);
     if (apiUrl) {
-      await postToApi({ action: 'addItem', item: newItem });
-      await fetchData(); 
-    } else {
-      setItems(prev => [...prev, newItem]);
+      postToApi({ action: 'addItem', item: newItem }).then(() => fetchData()).catch(console.error);
     }
   };
 
   const updateItem = async (code: string, updates: Partial<Item>) => {
+    setItems(prev => prev.map(item => item.code === code ? { ...item, ...updates } : item));
     if (apiUrl) {
-      await postToApi({ action: 'updateItem', code, updates });
-      await fetchData();
-    } else {
-      setItems(prev => prev.map(item => item.code === code ? { ...item, ...updates } : item));
+      postToApi({ action: 'updateItem', code, updates }).then(() => fetchData()).catch(console.error);
     }
   };
 
@@ -190,22 +282,21 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
      const diff = newQty - currentItem.currentStock;
      
      if (apiUrl) {
-       await postToApi({ action: 'adjustStock', itemCode: code, newQuantity: newQty, reason });
-       await fetchData();
-     } else {
-        updateItem(code, { currentStock: newQty });
-        const newLog: LogEntry = {
-          id: Date.now().toString(),
-          date: new Date().toISOString(),
-          itemCode: code,
-          itemName: currentItem.name,
-          type: TransactionType.ADJUSTMENT, 
-          quantity: Math.abs(diff),
-          partyName: `Adjustment: ${reason}`,
-          stockAfter: newQty
-        };
-        setLogs(prev => [newLog, ...prev]);
+       postToApi({ action: 'adjustStock', itemCode: code, newQuantity: newQty, reason }).then(() => fetchData()).catch(console.error);
      }
+     
+     setItems(prev => prev.map(item => item.code === code ? { ...item, currentStock: newQty } : item));
+     const newLog: LogEntry = {
+       id: Date.now().toString(),
+       date: new Date().toISOString(),
+       itemCode: code,
+       itemName: currentItem.name,
+       type: TransactionType.ADJUSTMENT, 
+       quantity: Math.abs(diff),
+       partyName: `Adjustment: ${reason}`,
+       stockAfter: newQty
+     };
+     setLogs(prev => [newLog, ...prev]);
   };
 
   const processBulkAdjustStock = async (entries: AdjustmentEntry[]) => {
@@ -369,51 +460,51 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
 
   const processInward = async ({ itemCode, quantity, supplier, date, newItemDetails }: { itemCode: string; quantity: number; supplier: string; date?: string; newItemDetails?: Partial<Item> }) => {
     if (apiUrl) {
-      await postToApi({ 
+      postToApi({ 
         action: 'inward', 
         itemCode, 
         quantity, 
         supplier, 
         date,
         newItemDetails 
-      });
-      await fetchData();
+      }).then(() => fetchData()).catch(console.error); // Fire and forget background sync
     } else {
-      await new Promise(resolve => setTimeout(resolve, 500));
-      let currentItem = items.find(i => i.code === itemCode);
-      let stockAfter = quantity;
-
-      if (currentItem) {
-        stockAfter = currentItem.currentStock + quantity;
-        setItems(prev => prev.map(item => item.code === itemCode ? { ...item, currentStock: stockAfter } : item));
-      } else if (newItemDetails && newItemDetails.name) {
-        const newItem: Item = {
-          code: itemCode,
-          name: newItemDetails.name!,
-          category: newItemDetails.category || 'General',
-          uom: newItemDetails.uom || 'pcs',
-          openingStock: 0,
-          currentStock: quantity
-        };
-        setItems(prev => [...prev, newItem]);
-        currentItem = newItem;
-        stockAfter = quantity;
-      } else {
-        throw new Error("Item not found");
-      }
-
-      const newLog: LogEntry = {
-        id: Date.now().toString(),
-        date: date ? new Date(date).toISOString() : new Date().toISOString(),
-        itemCode,
-        itemName: currentItem ? currentItem.name : 'Unknown',
-        type: TransactionType.INWARD,
-        quantity,
-        partyName: supplier,
-        stockAfter
-      };
-      setLogs(prev => [newLog, ...prev]);
+      await new Promise(resolve => setTimeout(resolve, 300));
     }
+
+    let currentItem = items.find(i => i.code === itemCode);
+    let stockAfter = quantity;
+
+    if (currentItem) {
+      stockAfter = currentItem.currentStock + quantity;
+      setItems(prev => prev.map(item => item.code === itemCode ? { ...item, currentStock: stockAfter } : item));
+    } else if (newItemDetails && newItemDetails.name) {
+      const newItem: Item = {
+        code: itemCode,
+        name: newItemDetails.name!,
+        category: newItemDetails.category || 'General',
+        uom: newItemDetails.uom || 'pcs',
+        openingStock: 0,
+        currentStock: quantity
+      };
+      setItems(prev => [...prev, newItem]);
+      currentItem = newItem;
+      stockAfter = quantity;
+    } else if (!apiUrl) {
+      throw new Error("Item not found");
+    }
+
+    const newLog: LogEntry = {
+      id: Date.now().toString(),
+      date: date ? new Date(date).toISOString() : new Date().toISOString(),
+      itemCode,
+      itemName: currentItem ? currentItem.name : 'Unknown',
+      type: TransactionType.INWARD,
+      quantity,
+      partyName: supplier,
+      stockAfter
+    };
+    setLogs(prev => [newLog, ...prev]);
   };
 
   const processBulkInward = async (entries: InwardEntry[]) => {
@@ -489,30 +580,30 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
   };
 
   const processOutward = async ({ itemCode, quantity, customer, date }: { itemCode: string; quantity: number; customer: string; date?: string }) => {
+    const currentItem = items.find(i => i.code === itemCode);
+    if (!currentItem) throw new Error("Item not found.");
+    if (currentItem.currentStock < quantity) throw new Error("Insufficient stock!");
+
     if (apiUrl) {
-      await postToApi({ action: 'outward', itemCode, quantity, customer, date });
-      await fetchData();
+      postToApi({ action: 'outward', itemCode, quantity, customer, date }).then(() => fetchData()).catch(console.error); // Fire and forget
     } else {
-      await new Promise(resolve => setTimeout(resolve, 500));
-      const currentItem = items.find(i => i.code === itemCode);
-      if (!currentItem) throw new Error("Item not found.");
-      if (currentItem.currentStock < quantity) throw new Error("Insufficient stock!");
-
-      const stockAfter = currentItem.currentStock - quantity;
-      setItems(prev => prev.map(i => i.code === itemCode ? { ...i, currentStock: stockAfter } : i));
-
-      const newLog: LogEntry = {
-        id: Date.now().toString(),
-        date: date ? new Date(date).toISOString() : new Date().toISOString(),
-        itemCode,
-        itemName: currentItem.name,
-        type: TransactionType.OUTWARD,
-        quantity,
-        partyName: customer,
-        stockAfter
-      };
-      setLogs(prev => [newLog, ...prev]);
+      await new Promise(resolve => setTimeout(resolve, 300));
     }
+
+    const stockAfter = currentItem.currentStock - quantity;
+    setItems(prev => prev.map(i => i.code === itemCode ? { ...i, currentStock: stockAfter } : i));
+
+    const newLog: LogEntry = {
+      id: Date.now().toString(),
+      date: date ? new Date(date).toISOString() : new Date().toISOString(),
+      itemCode,
+      itemName: currentItem.name,
+      type: TransactionType.OUTWARD,
+      quantity,
+      partyName: customer,
+      stockAfter
+    };
+    setLogs(prev => [newLog, ...prev]);
   };
 
   const processBulkOutward = async (entries: OutwardEntry[]) => {
@@ -761,6 +852,8 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
       processBulkAdjustStock,
       processBulkUpdateMinMax,
       processBulkUpdateLocation,
+      isOffline,
+      syncQueueLength: syncQueue.length,
       setConnectionUrl 
     }}>
       {children}
