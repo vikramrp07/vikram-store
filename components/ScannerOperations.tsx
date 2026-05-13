@@ -339,48 +339,6 @@ const ScannerOperations: React.FC = () => {
           </div>
         </div>
 
-        {/* Mode Selector */}
-        <div className="grid grid-cols-3 gap-3 sm:gap-4 mb-8">
-          <button
-            type="button"
-            onClick={() => { setMode('put'); setSelectedItem(null); setMessage(null); inputRef.current?.focus(); }}
-            className={`flex flex-col items-center justify-center py-4 px-2 rounded-2xl border-2 transition-all duration-300 active:scale-95 ${
-              mode === 'put' 
-                ? 'border-green-500 bg-green-50 text-green-700 shadow-lg shadow-green-500/20 shadow-[0_0_15px_rgba(34,197,94,0.3)]' 
-                : 'border-slate-100 bg-slate-50/50 text-slate-500 hover:border-green-200 hover:bg-green-50/30'
-            }`}
-          >
-            <ArrowDownCircle size={28} className={`mb-2 ${mode === 'put' ? 'opacity-100' : 'opacity-70'}`} strokeWidth={mode === 'put' ? 2.5 : 2} />
-            <span className="font-extrabold text-sm sm:text-base tracking-wide">PUT</span>
-          </button>
-          
-          <button
-            type="button"
-            onClick={() => { setMode('take'); setSelectedItem(null); setMessage(null); inputRef.current?.focus(); }}
-            className={`flex flex-col items-center justify-center py-4 px-2 rounded-2xl border-2 transition-all duration-300 active:scale-95 ${
-              mode === 'take' 
-                ? 'border-red-500 bg-red-50 text-red-700 shadow-lg shadow-red-500/20 shadow-[0_0_15px_rgba(239,68,68,0.3)]' 
-                : 'border-slate-100 bg-slate-50/50 text-slate-500 hover:border-red-200 hover:bg-red-50/30'
-            }`}
-          >
-            <ArrowUpCircle size={28} className={`mb-2 ${mode === 'take' ? 'opacity-100' : 'opacity-70'}`} strokeWidth={mode === 'take' ? 2.5 : 2} />
-            <span className="font-extrabold text-sm sm:text-base tracking-wide">TAKE</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => { setMode('count'); setSelectedItem(null); setMessage(null); inputRef.current?.focus(); }}
-            className={`flex flex-col items-center justify-center py-4 px-2 rounded-2xl border-2 transition-all duration-300 active:scale-95 ${
-              mode === 'count' 
-                ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-lg shadow-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.3)]' 
-                : 'border-slate-100 bg-slate-50/50 text-slate-500 hover:border-blue-200 hover:bg-blue-50/30'
-            }`}
-          >
-            <ClipboardList size={28} className={`mb-2 ${mode === 'count' ? 'opacity-100' : 'opacity-70'}`} strokeWidth={mode === 'count' ? 2.5 : 2} />
-            <span className="font-extrabold text-sm sm:text-base tracking-wide">COUNT</span>
-          </button>
-        </div>
-
         {/* Messages */}
         {message && (
           <div className={`p-4 rounded-xl mb-6 flex items-start animate-in fade-in slide-in-from-top-2 shadow-sm ${message.type === 'success' ? 'bg-green-50 text-green-800 border border-green-200' : 'bg-red-50 text-red-800 border border-red-200'}`}>
@@ -462,6 +420,51 @@ const ScannerOperations: React.FC = () => {
                 )}
               </div>
             </form>
+
+            {/* Mode Selector for Quick Mode Context when not scanning */}
+            <div className="mt-8">
+              <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3 text-center">Next Action / Quick Mode Default</h3>
+              <div className="grid grid-cols-3 gap-3 sm:gap-4 mb-4">
+                <button
+                  type="button"
+                  onClick={() => { setMode('put'); inputRef.current?.focus(); }}
+                  className={`flex flex-col items-center justify-center py-4 px-2 rounded-2xl border-2 transition-all duration-300 active:scale-95 ${
+                    mode === 'put' 
+                      ? 'border-green-500 bg-green-50 text-green-700 shadow-lg shadow-green-500/20 shadow-[0_0_15px_rgba(34,197,94,0.3)]' 
+                      : 'border-slate-100 bg-slate-50/50 text-slate-500 hover:border-green-200 hover:bg-green-50/30'
+                  }`}
+                >
+                  <ArrowDownCircle size={28} className={`mb-2 ${mode === 'put' ? 'opacity-100' : 'opacity-70'}`} strokeWidth={mode === 'put' ? 2.5 : 2} />
+                  <span className="font-extrabold text-sm sm:text-base tracking-wide">PUT</span>
+                </button>
+                
+                <button
+                  type="button"
+                  onClick={() => { setMode('take'); inputRef.current?.focus(); }}
+                  className={`flex flex-col items-center justify-center py-4 px-2 rounded-2xl border-2 transition-all duration-300 active:scale-95 ${
+                    mode === 'take' 
+                      ? 'border-red-500 bg-red-50 text-red-700 shadow-lg shadow-red-500/20 shadow-[0_0_15px_rgba(239,68,68,0.3)]' 
+                      : 'border-slate-100 bg-slate-50/50 text-slate-500 hover:border-red-200 hover:bg-red-50/30'
+                  }`}
+                >
+                  <ArrowUpCircle size={28} className={`mb-2 ${mode === 'take' ? 'opacity-100' : 'opacity-70'}`} strokeWidth={mode === 'take' ? 2.5 : 2} />
+                  <span className="font-extrabold text-sm sm:text-base tracking-wide">TAKE</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => { setMode('count'); inputRef.current?.focus(); }}
+                  className={`flex flex-col items-center justify-center py-4 px-2 rounded-2xl border-2 transition-all duration-300 active:scale-95 ${
+                    mode === 'count' 
+                      ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-lg shadow-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.3)]' 
+                      : 'border-slate-100 bg-slate-50/50 text-slate-500 hover:border-blue-200 hover:bg-blue-50/30'
+                  }`}
+                >
+                  <ClipboardList size={28} className={`mb-2 ${mode === 'count' ? 'opacity-100' : 'opacity-70'}`} strokeWidth={mode === 'count' ? 2.5 : 2} />
+                  <span className="font-extrabold text-sm sm:text-base tracking-wide">COUNT</span>
+                </button>
+              </div>
+            </div>
           </div>
         ) : (
           <form onSubmit={handleSubmitAction} className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
@@ -486,6 +489,48 @@ const ScannerOperations: React.FC = () => {
                    <span className="text-sm font-bold text-slate-500 uppercase">{selectedItem.uom}</span>
                 </div>
               </div>
+            </div>
+
+            {/* Mode Selector - Shown here after scan */}
+            <div className="grid grid-cols-3 gap-3 sm:gap-4">
+              <button
+                type="button"
+                onClick={() => { setMode('put'); setTimeout(() => qtyRef.current?.focus(), 50); }}
+                className={`flex flex-col items-center justify-center py-4 px-2 rounded-2xl border-2 transition-all duration-300 active:scale-95 ${
+                  mode === 'put' 
+                    ? 'border-green-500 bg-green-50 text-green-700 shadow-lg shadow-green-500/20 shadow-[0_0_15px_rgba(34,197,94,0.3)]' 
+                    : 'border-slate-100 bg-slate-50/50 text-slate-500 hover:border-green-200 hover:bg-green-50/30'
+                }`}
+              >
+                <ArrowDownCircle size={28} className={`mb-2 ${mode === 'put' ? 'opacity-100' : 'opacity-70'}`} strokeWidth={mode === 'put' ? 2.5 : 2} />
+                <span className="font-extrabold text-sm sm:text-base tracking-wide">PUT</span>
+              </button>
+              
+              <button
+                type="button"
+                onClick={() => { setMode('take'); setTimeout(() => qtyRef.current?.focus(), 50); }}
+                className={`flex flex-col items-center justify-center py-4 px-2 rounded-2xl border-2 transition-all duration-300 active:scale-95 ${
+                  mode === 'take' 
+                    ? 'border-red-500 bg-red-50 text-red-700 shadow-lg shadow-red-500/20 shadow-[0_0_15px_rgba(239,68,68,0.3)]' 
+                    : 'border-slate-100 bg-slate-50/50 text-slate-500 hover:border-red-200 hover:bg-red-50/30'
+                }`}
+              >
+                <ArrowUpCircle size={28} className={`mb-2 ${mode === 'take' ? 'opacity-100' : 'opacity-70'}`} strokeWidth={mode === 'take' ? 2.5 : 2} />
+                <span className="font-extrabold text-sm sm:text-base tracking-wide">TAKE</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { setMode('count'); setTimeout(() => qtyRef.current?.focus(), 50); }}
+                className={`flex flex-col items-center justify-center py-4 px-2 rounded-2xl border-2 transition-all duration-300 active:scale-95 ${
+                  mode === 'count' 
+                    ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-lg shadow-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.3)]' 
+                    : 'border-slate-100 bg-slate-50/50 text-slate-500 hover:border-blue-200 hover:bg-blue-50/30'
+                }`}
+              >
+                <ClipboardList size={28} className={`mb-2 ${mode === 'count' ? 'opacity-100' : 'opacity-70'}`} strokeWidth={mode === 'count' ? 2.5 : 2} />
+                <span className="font-extrabold text-sm sm:text-base tracking-wide">COUNT</span>
+              </button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5 bg-white p-5 rounded-2xl border border-slate-100 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)]">
