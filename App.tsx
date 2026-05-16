@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Dashboard } from './components/Dashboard';
 import { InwardForm } from './components/InwardForm';
 import { OutwardForm } from './components/OutwardForm';
@@ -9,14 +9,10 @@ import { BOMManager } from './components/BOMManager';
 import { RequirementCalculator } from './components/RequirementCalculator';
 import HelpGuide from './components/HelpGuide';
 import ScannerOperations from './components/ScannerOperations';
-import { Login } from './components/Login';
-import { LayoutDashboard, ArrowDownCircle, ArrowUpCircle, Database, FileText, Menu, X, Box, Settings, Link as LinkIcon, CheckCircle, AlertTriangle, History, List, Calculator, HelpCircle, ScanLine, CloudOff, Cloud, RefreshCw, LogOut } from 'lucide-react';
+import { LayoutDashboard, ArrowDownCircle, ArrowUpCircle, Database, FileText, Menu, X, Box, Settings, Link as LinkIcon, CheckCircle, AlertTriangle, History, List, Calculator, HelpCircle, ScanLine, CloudOff, Cloud, RefreshCw } from 'lucide-react';
 import { useInventory } from './context/InventoryContext';
 
 const App: React.FC = () => {
-  const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    return sessionStorage.getItem('is_authenticated') === 'true';
-  });
   const [activeTab, setActiveTab] = useState('dashboard');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -73,22 +69,6 @@ const App: React.FC = () => {
     alert("Connection saved! The app will now attempt to sync.");
   };
 
-  const handleLogout = () => {
-    sessionStorage.removeItem('is_authenticated');
-    setIsAuthenticated(false);
-  };
-
-  if (!isAuthenticated) {
-    return (
-      <Login 
-        onLogin={() => {
-          sessionStorage.setItem('is_authenticated', 'true');
-          setIsAuthenticated(true);
-        }} 
-      />
-    );
-  }
-
   return (
     <div className="flex h-screen bg-gray-50">
       {/* Sidebar - Desktop */}
@@ -142,21 +122,12 @@ const App: React.FC = () => {
 
            <button 
              onClick={() => setShowSettings(true)}
-             className={`w-full p-3 rounded-lg text-xs flex items-center space-x-2 transition-colors ${isConnected && !connectionError ? 'bg-green-50 text-green-800 border border-green-100' : 'bg-blue-50 text-blue-800 hover:bg-blue-100'} mb-2`}
+             className={`w-full p-3 rounded-lg text-xs flex items-center space-x-2 transition-colors ${isConnected && !connectionError ? 'bg-green-50 text-green-800 border border-green-100' : 'bg-blue-50 text-blue-800 hover:bg-blue-100'}`}
            >
               {isConnected && !connectionError ? <CheckCircle size={16} /> : <Settings size={16} />}
               <div className="text-left">
                 <p className="font-semibold">{isConnected ? (connectionError ? 'Connection Failed' : 'Sheet Connected') : 'Connect Sheet'}</p>
                 <p className="opacity-80">{isConnected ? (connectionError ? 'Check settings' : 'Data syncing live') : 'Using local demo data'}</p>
-              </div>
-           </button>
-           <button 
-             onClick={handleLogout}
-             className="w-full p-3 rounded-lg text-xs flex items-center space-x-2 transition-colors bg-gray-50 text-gray-700 hover:bg-red-50 hover:text-red-700 border border-gray-200"
-           >
-              <LogOut size={16} />
-              <div className="text-left">
-                <p className="font-semibold">Logout / Lock</p>
               </div>
            </button>
         </div>
@@ -203,20 +174,10 @@ const App: React.FC = () => {
                 setShowSettings(true);
                 setMobileMenuOpen(false);
               }}
-              className="w-full flex items-center space-x-3 px-4 py-4 rounded-lg border border-transparent text-gray-600 bg-gray-50 mb-2"
+              className="w-full flex items-center space-x-3 px-4 py-4 rounded-lg border border-transparent text-gray-600 bg-gray-50"
             >
               <Settings size={20} />
               <span className="font-medium">Connection Settings</span>
-          </button>
-          <button
-              onClick={() => {
-                handleLogout();
-                setMobileMenuOpen(false);
-              }}
-              className="w-full flex items-center space-x-3 px-4 py-4 rounded-lg border border-transparent text-red-600 bg-red-50"
-            >
-              <LogOut size={20} />
-              <span className="font-medium">Logout / Lock</span>
           </button>
         </div>
       )}
